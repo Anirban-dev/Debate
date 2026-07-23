@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Re-issue updated cookies with profile completed
-    setAuthCookies(response, userObj);
+    setAuthCookies(response, userObj, req);
 
     return response;
   } catch (err: any) {

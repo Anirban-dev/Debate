@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
     authProvider: authUserPayload.authProvider,
     avatarUrl: authUserPayload.avatarUrl,
     isProfileComplete: !needsUsername
-  });
+  }, req);
 
   // Clear anti-CSRF state cookie
   response.cookies.delete('oauth_state');

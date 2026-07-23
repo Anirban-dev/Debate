@@ -19,15 +19,15 @@ export interface TokenPayload {
  * Prioritizes OAUTH_BASE_URL and APP_URL, falling back to request headers or localhost.
  */
 export function getAppUrl(req?: NextRequest): string {
-  if (process.env.APP_URL) {
-    return process.env.APP_URL.replace(/\/$/, '');
-  }
   if (req) {
     const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const proto = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
     if (host) {
-      return `${proto}://${host}`;
+      return `${proto}://${host}`.replace(/\/$/, '');
     }
+  }
+  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
+    return process.env.APP_URL.replace(/\/$/, '');
   }
   return 'http://localhost:3000';
 }
@@ -92,7 +92,8 @@ export function setAuthCookies(
     authProvider: string;
     avatarUrl?: string;
     isProfileComplete?: boolean;
-  }
+  },
+  req?: NextRequest
 ) {
   const payload: TokenPayload = {
     oauthId: user.oauthId,
@@ -106,24 +107,33 @@ export function setAuthCookies(
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
 
-  const isProd = process.env.NODE_ENV === 'production';
+  let isSecure = false;
+  if (req) {
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+    const proto = req.headers.get('x-forwarded-proto') || '';
+    isSecure = proto === 'https' || (!host.includes('localhost') && !host.includes('127.0.0.1'));
+  } else {
+    isSecure = process.env.NODE_ENV === 'production';
+  }
 
-  // Access Token Cookie (15 mins) - configured for cross-origin iframe compatibility
+  const sameSite = isSecure ? 'none' : 'lax';
+
+  // Access Token Cookie (15 mins)
   response.cookies.set('access_token', accessToken, {
     httpOnly: true,
-    secure: true,
-    sameSite: 'none',
+    secure: isSecure,
+    sameSite,
     path: '/',
-    maxAge: 60 * 15 // 15 minutes
+    maxAge: 60 * 15
   });
 
   // Refresh Token Cookie (7 days)
   response.cookies.set('refresh_token', refreshToken, {
     httpOnly: true,
-    secure: true,
-    sameSite: 'none',
+    secure: isSecure,
+    sameSite,
     path: '/',
-    maxAge: 60 * 60 * 24 * 7 // 7 days
+    maxAge: 60 * 60 * 24 * 7
   });
 
   return { accessToken, refreshToken };
