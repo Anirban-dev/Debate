@@ -1,0 +1,6 @@
+{
+  "name": "MatchLobby - Team & Spectator Hub",
+  "description": "Real-time dual team lobbies, spectator hub, live timer with auto-mute, voice & video, multi-page shared notes, and 3 chat channels.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
