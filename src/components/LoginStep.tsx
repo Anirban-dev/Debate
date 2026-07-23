@@ -210,7 +210,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
                   </div>
 
                   <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800">
-                    💡 Tip: If you set <code className="text-blue-300">OAUTH_BASE_URL=http://localhost:3000</code> in environment variables, the app will always send the localhost callback URI to Google/Discord.
+                    💡 Tip: Set <code className="text-blue-300">APP_URL=http://localhost:3000</code> in your environment variables if you want to force all OAuth callback requests to use localhost.
                   </p>
                 </div>
               )}

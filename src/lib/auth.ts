@@ -19,9 +19,6 @@ export interface TokenPayload {
  * Prioritizes OAUTH_BASE_URL and APP_URL, falling back to request headers or localhost.
  */
 export function getAppUrl(req?: NextRequest): string {
-  if (process.env.OAUTH_BASE_URL) {
-    return process.env.OAUTH_BASE_URL.replace(/\/$/, '');
-  }
   if (process.env.APP_URL) {
     return process.env.APP_URL.replace(/\/$/, '');
   }
