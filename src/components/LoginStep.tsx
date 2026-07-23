@@ -42,9 +42,27 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleQuickPreset = (presetUsername: string, authType: 'google' | 'discord' | 'direct' = 'direct') => {
-    setUsernameInput(presetUsername);
-    setProvider(authType);
+  const handleOAuthLogin = async (selectedProvider: 'google' | 'discord') => {
+    setProvider(selectedProvider);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/auth/oauth?provider=${selectedProvider}`);
+      const data = await res.json();
+
+      if (data.configured && data.authUrl) {
+        window.open(data.authUrl, 'oauth_popup', 'width=600,height=700');
+      } else {
+        // Preset username fallback if env var is not yet configured in .env
+        const defaultName = selectedProvider === 'google' ? 'alex_blue' : 'sarah_red';
+        setUsernameInput(defaultName);
+        setErrorMsg(
+          data.message ||
+            `Note: ${selectedProvider.toUpperCase()}_CLIENT_ID environment variable is not configured yet. Added demo handle @${defaultName}.`
+        );
+      }
+    } catch (err: any) {
+      handleQuickPreset(selectedProvider === 'google' ? 'alex_blue' : 'sarah_red', selectedProvider);
+    }
   };
 
   return (
@@ -72,14 +90,14 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={() => handleQuickPreset('alex_blue', 'google')}
+            onClick={() => handleOAuthLogin('google')}
             className={`flex items-center justify-center gap-2 text-xs font-semibold py-2.5 px-3 rounded-xl border transition ${
               provider === 'google'
                 ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40'
                 : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-200'
             }`}
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
+            <svg width={16} height={16} className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.2 9 5 12 5z"/>
               <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/>
               <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9c-.2-.7-.4-1.5-.4-2.3z"/>
@@ -90,7 +108,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
 
           <button
             type="button"
-            onClick={() => handleQuickPreset('sarah_red', 'discord')}
+            onClick={() => handleOAuthLogin('discord')}
             className={`flex items-center justify-center gap-2 text-xs font-semibold py-2.5 px-3 rounded-xl border transition ${
               provider === 'discord'
                 ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-900/40'

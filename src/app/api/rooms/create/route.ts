@@ -1,14 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import { activeRooms } from '@/lib/socketStore';
 import { MatchRoomState } from '@/types';
 import { initMongoDB, isMongoConnected, upsertRoom } from '@/db/mongo';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function POST(req: NextRequest) {
   try {
+    const body = await req.json().catch(() => ({}));
     const {
       roomId,
       roomTitle,
@@ -17,13 +14,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       team1TotalTime = 300,
       team2TotalTime = 300,
       warningThresholdSeconds = 10
-    } = req.body || {};
+    } = body;
 
     const cleanRoomId = (roomId || '').trim().toLowerCase().replace(/\s+/g, '-');
     const cleanAdmin = (adminUsername || '').trim().toLowerCase();
 
     if (!cleanRoomId || !cleanAdmin) {
-      return res.status(400).json({ error: "Room ID and Admin Username are required" });
+      return NextResponse.json({ error: "Room ID and Admin Username are required" }, { status: 400 });
     }
 
     const newRoomState: MatchRoomState = {
@@ -89,9 +86,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    return res.status(200).json({ success: true, room: newRoomState });
+    return NextResponse.json({ success: true, room: newRoomState });
   } catch (err: any) {
     console.error('Create room error:', err);
-    return res.status(500).json({ error: err.message || 'Room creation failed' });
+    return NextResponse.json({ error: err.message || 'Room creation failed' }, { status: 500 });
   }
 }
