@@ -5,9 +5,12 @@ const DEFAULT_JWT_SECRET = process.env.JWT_SECRET || 'matchlobby-default-access-
 const DEFAULT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'matchlobby-default-refresh-jwt-secret-key-32bytes!';
 
 export interface TokenPayload {
-  username: string;
+  oauthId: string;
+  username?: string;
+  email?: string;
   authProvider: string;
   avatarUrl?: string;
+  isProfileComplete?: boolean;
   tokenType?: 'access' | 'refresh';
 }
 
@@ -64,12 +67,22 @@ export function verifyRefreshToken(token: string): TokenPayload | null {
  */
 export function setAuthCookies(
   response: NextResponse,
-  user: { username: string; authProvider: string; avatarUrl?: string }
+  user: {
+    oauthId: string;
+    username?: string;
+    email?: string;
+    authProvider: string;
+    avatarUrl?: string;
+    isProfileComplete?: boolean;
+  }
 ) {
   const payload: TokenPayload = {
+    oauthId: user.oauthId,
     username: user.username,
+    email: user.email,
     authProvider: user.authProvider,
-    avatarUrl: user.avatarUrl
+    avatarUrl: user.avatarUrl,
+    isProfileComplete: user.isProfileComplete ?? (!!user.username)
   };
 
   const accessToken = signAccessToken(payload);

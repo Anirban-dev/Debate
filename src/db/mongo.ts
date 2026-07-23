@@ -2,15 +2,23 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { TeamId } from '../types';
 
 export interface IUser extends Document {
-  username: string;
+  oauthId: string;
+  email?: string;
+  username?: string;
   authProvider: string;
+  avatarUrl?: string;
+  isProfileComplete: boolean;
   createdAt: Date;
   lastLogin: Date;
 }
 
 const UserSchema = new Schema<IUser>({
-  username: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  authProvider: { type: String, default: 'direct' },
+  oauthId: { type: String, required: true, unique: true, index: true },
+  email: { type: String },
+  username: { type: String, sparse: true, unique: true, lowercase: true, trim: true },
+  authProvider: { type: String, required: true },
+  avatarUrl: { type: String },
+  isProfileComplete: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   lastLogin: { type: Date, default: Date.now }
 });
@@ -50,10 +58,21 @@ export const RoomModel: Model<IRoom> = (mongoose.models.Room as Model<IRoom>) ||
 
 let isDbConnected = false;
 
+// In-Memory fallback store when MongoDB is not connected
+const memoryUsers = new Map<string, {
+  oauthId: string;
+  email?: string;
+  username?: string;
+  authProvider: string;
+  avatarUrl?: string;
+  isProfileComplete: boolean;
+  lastLogin: Date;
+}>();
+
 export async function initMongoDB() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    console.log('ℹ️ MONGODB_URI not provided. Operating with high-performance MongoDB memory collections.');
+    console.log('ℹ️ MONGODB_URI not provided. Operating with high-performance memory collections.');
     return false;
   }
 
@@ -72,13 +91,101 @@ export function isMongoConnected() {
   return isDbConnected;
 }
 
-export async function upsertUser(username: string, authProvider: string) {
-  if (!isDbConnected) return null;
-  return UserModel.findOneAndUpdate(
-    { username },
-    { authProvider, lastLogin: new Date() },
-    { upsert: true, new: true }
-  );
+export async function findUserByOAuthId(oauthId: string) {
+  if (isDbConnected) {
+    return UserModel.findOne({ oauthId });
+  }
+  return memoryUsers.get(oauthId) || null;
+}
+
+export async function findUserByUsername(username: string) {
+  const cleanUsername = username.trim().toLowerCase();
+  if (isDbConnected) {
+    return UserModel.findOne({ username: cleanUsername });
+  }
+  for (const user of memoryUsers.values()) {
+    if (user.username && user.username.toLowerCase() === cleanUsername) {
+      return user;
+    }
+  }
+  return null;
+}
+
+export async function createOrUpdateOAuthUser(data: {
+  oauthId: string;
+  email?: string;
+  authProvider: string;
+  avatarUrl?: string;
+}) {
+  if (isDbConnected) {
+    let user = await UserModel.findOne({ oauthId: data.oauthId });
+    if (!user) {
+      user = new UserModel({
+        oauthId: data.oauthId,
+        email: data.email,
+        authProvider: data.authProvider,
+        avatarUrl: data.avatarUrl,
+        isProfileComplete: false,
+        createdAt: new Date(),
+        lastLogin: new Date()
+      });
+      await user.save();
+    } else {
+      user.lastLogin = new Date();
+      if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
+      if (data.email) user.email = data.email;
+      await user.save();
+    }
+    return user;
+  }
+
+  let user = memoryUsers.get(data.oauthId);
+  if (!user) {
+    user = {
+      oauthId: data.oauthId,
+      email: data.email,
+      authProvider: data.authProvider,
+      avatarUrl: data.avatarUrl,
+      isProfileComplete: false,
+      lastLogin: new Date()
+    };
+    memoryUsers.set(data.oauthId, user);
+  } else {
+    user.lastLogin = new Date();
+    if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
+    if (data.email) user.email = data.email;
+  }
+  return user;
+}
+
+export async function setUniqueUsername(oauthId: string, desiredUsername: string) {
+  const cleanUsername = desiredUsername.trim().toLowerCase();
+
+  // Validate format: 3-20 characters, alphanumeric & underscores only
+  if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+    throw new Error('Username must be 3-20 characters and contain only letters, numbers, or underscores.');
+  }
+
+  // Check if username is already claimed by another user
+  const existingUser = await findUserByUsername(cleanUsername);
+  if (existingUser && (existingUser as any).oauthId !== oauthId) {
+    throw new Error(`The username "@${cleanUsername}" is already taken by another player. Please choose another one.`);
+  }
+
+  if (isDbConnected) {
+    const user = await UserModel.findOne({ oauthId });
+    if (!user) throw new Error('OAuth user account not found');
+    user.username = cleanUsername;
+    user.isProfileComplete = true;
+    await user.save();
+    return user;
+  }
+
+  const user = memoryUsers.get(oauthId);
+  if (!user) throw new Error('OAuth user account not found');
+  user.username = cleanUsername;
+  user.isProfileComplete = true;
+  return user;
 }
 
 export async function upsertRoom(data: {

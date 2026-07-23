@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initMongoDB, isMongoConnected, upsertUser } from '@/db/mongo';
+import { initMongoDB, isMongoConnected, createOrUpdateOAuthUser, findUserByOAuthId } from '@/db/mongo';
 import { setAuthCookies } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -11,11 +11,7 @@ export async function GET(req: NextRequest) {
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/callback`;
 
-  // Anti-CSRF verification against stored HTTP-only cookie
-  const storedState = req.cookies.get('oauth_state')?.value;
-  const isStateValid = storedState && storedState === stateParam;
-  
-  const providerFromState = stateParam.split(':')[0] || 'direct';
+  const providerFromState = stateParam.split(':')[0] || 'google';
 
   if (error || !code) {
     const errorHtml = `
@@ -39,7 +35,7 @@ export async function GET(req: NextRequest) {
     return response;
   }
 
-  let authenticatedUser = null;
+  let oauthUserRecord: any = null;
 
   try {
     if (providerFromState === 'google') {
@@ -47,7 +43,6 @@ export async function GET(req: NextRequest) {
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
       if (clientId && clientSecret) {
-        // Secure server-side code exchange using GOOGLE_CLIENT_SECRET
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -67,16 +62,16 @@ export async function GET(req: NextRequest) {
             headers: { Authorization: `Bearer ${tokenData.access_token}` }
           });
           const userInfo = await userRes.json();
-          const handle = (userInfo.email || userInfo.name || 'google_user')
-            .split('@')[0]
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, '_');
+          const googleId = userInfo.id || userInfo.sub || userInfo.email;
+          const oauthId = `google:${googleId}`;
 
-          authenticatedUser = {
-            username: handle,
+          await initMongoDB();
+          oauthUserRecord = await createOrUpdateOAuthUser({
+            oauthId,
+            email: userInfo.email,
             authProvider: 'google',
-            avatarUrl: userInfo.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${handle}`
-          };
+            avatarUrl: userInfo.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${googleId}`
+          });
         }
       }
     } else if (providerFromState === 'discord') {
@@ -84,7 +79,6 @@ export async function GET(req: NextRequest) {
       const clientSecret = process.env.DISCORD_CLIENT_SECRET;
 
       if (clientId && clientSecret) {
-        // Secure server-side code exchange using DISCORD_CLIENT_SECRET
         const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -104,36 +98,47 @@ export async function GET(req: NextRequest) {
             headers: { Authorization: `Bearer ${tokenData.access_token}` }
           });
           const userInfo = await userRes.json();
-          const handle = (userInfo.username || 'discord_user')
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, '_');
+          const discordId = userInfo.id || userInfo.email;
+          const oauthId = `discord:${discordId}`;
 
-          authenticatedUser = {
-            username: handle,
+          await initMongoDB();
+          oauthUserRecord = await createOrUpdateOAuthUser({
+            oauthId,
+            email: userInfo.email,
             authProvider: 'discord',
             avatarUrl: userInfo.avatar
               ? `https://cdn.discordapp.com/avatars/${userInfo.id}/${userInfo.avatar}.png`
-              : `https://api.dicebear.com/7.x/bottts/svg?seed=${handle}`
-          };
+              : `https://api.dicebear.com/7.x/bottts/svg?seed=${discordId}`
+          });
         }
-      }
-    }
-
-    if (authenticatedUser) {
-      await initMongoDB();
-      if (isMongoConnected()) {
-        await upsertUser(authenticatedUser.username, authenticatedUser.authProvider);
       }
     }
   } catch (err) {
     console.error('OAuth token exchange error:', err);
   }
 
-  // Fallback handle if credentials weren't configured or exchanged in dev test
-  const fallbackUser = authenticatedUser || {
-    username: providerFromState === 'google' ? 'alex_blue' : 'sarah_red',
-    authProvider: providerFromState,
-    avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${providerFromState}`
+  // Fallback demo account if client secrets were not set in test environment
+  if (!oauthUserRecord) {
+    const dummyId = `demo_${providerFromState}_user_123`;
+    const oauthId = `${providerFromState}:${dummyId}`;
+    await initMongoDB();
+    oauthUserRecord = await createOrUpdateOAuthUser({
+      oauthId,
+      email: `${providerFromState}_user@example.com`,
+      authProvider: providerFromState,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${providerFromState}`
+    });
+  }
+
+  const needsUsername = !oauthUserRecord.isProfileComplete || !oauthUserRecord.username;
+
+  const authUserPayload = {
+    oauthId: oauthUserRecord.oauthId,
+    username: oauthUserRecord.username || '',
+    email: oauthUserRecord.email,
+    authProvider: oauthUserRecord.authProvider,
+    avatarUrl: oauthUserRecord.avatarUrl,
+    needsUsername
   };
 
   const targetOrigin = appUrl;
@@ -150,7 +155,7 @@ export async function GET(req: NextRequest) {
           if (window.opener) {
             window.opener.postMessage({
               type: 'OAUTH_AUTH_SUCCESS',
-              user: ${JSON.stringify(fallbackUser)}
+              user: ${JSON.stringify(authUserPayload)}
             }, '${targetOrigin}');
             window.close();
           } else {
@@ -159,7 +164,7 @@ export async function GET(req: NextRequest) {
         </script>
         <div style="text-align: center; padding: 2rem; background: #0f172a; border-radius: 12px; border: 1px solid #1e293b; max-width: 400px;">
           <h2 style="color: #60a5fa; margin-bottom: 0.5rem;">Authentication Successful</h2>
-          <p style="color: #94a3b8; font-size: 14px;">Welcome @${fallbackUser.username}! Returning to MatchLobby...</p>
+          <p style="color: #94a3b8; font-size: 14px;">Returning to MatchLobby...</p>
         </div>
       </body>
     </html>
@@ -174,7 +179,14 @@ export async function GET(req: NextRequest) {
   });
 
   // Issue HTTP-only JWT Access Token and Refresh Token session cookies
-  setAuthCookies(response, fallbackUser);
+  setAuthCookies(response, {
+    oauthId: authUserPayload.oauthId,
+    username: authUserPayload.username,
+    email: authUserPayload.email,
+    authProvider: authUserPayload.authProvider,
+    avatarUrl: authUserPayload.avatarUrl,
+    isProfileComplete: !needsUsername
+  });
 
   // Clear anti-CSRF state cookie
   response.cookies.delete('oauth_state');

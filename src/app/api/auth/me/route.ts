@@ -1,56 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken, verifyRefreshToken, setAuthCookies, clearAuthCookies } from '@/lib/auth';
+import { verifyAccessToken, verifyRefreshToken, setAuthCookies } from '@/lib/auth';
+import { initMongoDB, findUserByOAuthId } from '@/db/mongo';
 
 export async function GET(req: NextRequest) {
   try {
-    let accessToken = req.cookies.get('access_token')?.value;
+    let payload = null;
+    const accessToken = req.cookies.get('access_token')?.value;
 
-    if (!accessToken) {
-      const authHeader = req.headers.get('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        accessToken = authHeader.substring(7);
-      }
-    }
-
-    // Attempt Access Token validation
     if (accessToken) {
-      const userPayload = verifyAccessToken(accessToken);
-      if (userPayload) {
-        return NextResponse.json({
-          authenticated: true,
-          user: {
-            username: userPayload.username,
-            authProvider: userPayload.authProvider,
-            avatarUrl: userPayload.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${userPayload.username}`
-          }
-        });
+      payload = verifyAccessToken(accessToken);
+    }
+
+    if (!payload) {
+      const refreshToken = req.cookies.get('refresh_token')?.value;
+      if (refreshToken) {
+        payload = verifyRefreshToken(refreshToken);
       }
     }
 
-    // Access Token invalid or missing — fall back to Refresh Token validation
-    const refreshToken = req.cookies.get('refresh_token')?.value;
-    if (refreshToken) {
-      const refreshPayload = verifyRefreshToken(refreshToken);
-      if (refreshPayload) {
-        const user = {
-          username: refreshPayload.username,
-          authProvider: refreshPayload.authProvider,
-          avatarUrl: refreshPayload.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${refreshPayload.username}`
-        };
-
-        const response = NextResponse.json({
-          authenticated: true,
-          refreshed: true,
-          user
-        });
-
-        // Re-issue fresh access + refresh tokens in cookies
-        setAuthCookies(response, user);
-        return response;
-      }
+    if (!payload || !payload.oauthId) {
+      return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
     }
 
-    return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
+    await initMongoDB();
+    const dbUser = await findUserByOAuthId(payload.oauthId);
+
+    const activeUsername = dbUser?.username || payload.username;
+    const isComplete = dbUser ? (dbUser.isProfileComplete && !!activeUsername) : (payload.isProfileComplete && !!activeUsername);
+
+    if (isComplete && activeUsername) {
+      const userObj = {
+        username: activeUsername,
+        authProvider: payload.authProvider,
+        avatarUrl: payload.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${activeUsername}`
+      };
+
+      const response = NextResponse.json({
+        authenticated: true,
+        needsUsername: false,
+        user: userObj
+      });
+
+      setAuthCookies(response, {
+        oauthId: payload.oauthId,
+        username: activeUsername,
+        email: payload.email,
+        authProvider: payload.authProvider,
+        avatarUrl: userObj.avatarUrl,
+        isProfileComplete: true
+      });
+
+      return response;
+    }
+
+    // User is OAuth authenticated but needs to set a unique username
+    return NextResponse.json({
+      authenticated: true,
+      needsUsername: true,
+      oauthUser: {
+        oauthId: payload.oauthId,
+        email: payload.email,
+        authProvider: payload.authProvider
+      }
+    });
   } catch (err: any) {
     console.error('Session check error:', err);
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });

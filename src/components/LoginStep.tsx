@@ -1,64 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Disc as DiscordIcon, User, Lock, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Sparkles, ArrowRight, Disc as DiscordIcon, ShieldCheck, UserCheck, AtSign, CheckCircle2 } from 'lucide-react';
 
 interface LoginStepProps {
   onLoginSuccess: (user: { username: string; authProvider: string; avatarUrl: string }) => void;
 }
 
 export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
-  const [authTab, setAuthTab] = useState<'oauth' | 'credentials'>('oauth');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  // Mode: 'oauth_select' | 'choose_username'
+  const [stepMode, setStepMode] = useState<'oauth_select' | 'choose_username'>('oauth_select');
+
+  const [desiredUsername, setDesiredUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
       if (event.data && event.data.type === 'OAUTH_AUTH_SUCCESS') {
-        const user = event.data.user;
-        if (user && user.username) {
-          onLoginSuccess(user);
+        const payload = event.data.user;
+        if (payload) {
+          if (payload.needsUsername || !payload.username) {
+            // New user via OAuth -> Show "Choose Unique Username" screen
+            setStepMode('choose_username');
+            setErrorMsg(null);
+          } else {
+            // Returning user -> Log in directly!
+            onLoginSuccess({
+              username: payload.username,
+              authProvider: payload.authProvider,
+              avatarUrl: payload.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${payload.username}`
+            });
+          }
         }
       }
     };
     window.addEventListener('message', handleOAuthMessage);
     return () => window.removeEventListener('message', handleOAuthMessage);
   }, [onLoginSuccess]);
-
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = usernameInput.trim();
-    if (!cleanName) {
-      setErrorMsg('Please enter your unique username');
-      return;
-    }
-    if (!passwordInput || passwordInput.length < 4) {
-      setErrorMsg('Password must be at least 4 characters long to authenticate account');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanName, password: passwordInput, authProvider: 'direct' })
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      onLoginSuccess(data.user);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Authentication error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOAuthLogin = async (selectedProvider: 'google' | 'discord') => {
     setErrorMsg(null);
@@ -82,9 +59,41 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleClaimUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = desiredUsername.trim().toLowerCase();
+
+    if (!cleanName || cleanName.length < 3) {
+      setErrorMsg('Username must be at least 3 characters long.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch('/api/auth/username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanName })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to register username.');
+      }
+
+      onLoginSuccess(data.user);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error setting username');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden">
-      {/* Dynamic Background Glows */}
+      {/* Background Lighting */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -93,40 +102,18 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold uppercase tracking-wider">
             <ShieldCheck className="w-3.5 h-3.5" />
-            MatchLobby Auth Required
+            MatchLobby Identity Authentication
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Sign In to Continue
-          </h1>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Mandatory account authentication is required to access competitive lobbies, voice/video stages and spectator lounges.
-          </p>
-        </div>
 
-        {/* Auth Method Switcher Tabs */}
-        <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800">
-          <button
-            type="button"
-            onClick={() => { setAuthTab('oauth'); setErrorMsg(null); }}
-            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
-              authTab === 'oauth'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            OAuth Sign-In
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAuthTab('credentials'); setErrorMsg(null); }}
-            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
-              authTab === 'credentials'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Player Credentials
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            {stepMode === 'oauth_select' ? 'Sign In to MatchLobby' : 'Create Your Unique Username'}
+          </h1>
+
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            {stepMode === 'oauth_select'
+              ? 'OAuth authentication with Google or Discord is required to enter competitive lobbies.'
+              : 'Choose a unique player handle to represent you across all lobbies and matches.'}
+          </p>
         </div>
 
         {errorMsg && (
@@ -135,9 +122,9 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* TAB 1: OAuth Social Login */}
-        {authTab === 'oauth' && (
-          <div className="space-y-4 pt-1">
+        {/* STEP 1: OAuth Social Buttons Only */}
+        {stepMode === 'oauth_select' && (
+          <div className="space-y-4 pt-2">
             <button
               type="button"
               onClick={() => handleOAuthLogin('google')}
@@ -163,54 +150,43 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               <span>Continue with Discord</span>
             </button>
 
-            <div className="pt-2 text-center text-[11px] text-slate-500 space-y-1">
+            <div className="pt-3 text-center text-[11px] text-slate-500 space-y-1">
               <p className="flex items-center justify-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                Verified identity with OAuth 2.0 & JWT Sessions
+                No passwords required &bull; Secured with Google & Discord OAuth
               </p>
             </div>
           </div>
         )}
 
-        {/* TAB 2: Username & Password Auth */}
-        {authTab === 'credentials' && (
-          <form onSubmit={handleLoginSubmit} className="space-y-4 pt-1">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Player Username
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                  <User className="w-4 h-4" />
-                </span>
-                <input
-                  type="text"
-                  required
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="e.g. alex_blue, host_admin"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-xl py-3 pl-9 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
+        {/* STEP 2: New User - Choose Unique Username Form */}
+        {stepMode === 'choose_username' && (
+          <form onSubmit={handleClaimUsername} className="space-y-4 pt-1">
+            <div className="bg-blue-950/40 border border-blue-900/50 p-3 rounded-xl text-xs text-blue-300 flex items-center gap-2">
+              <UserCheck className="w-4 h-4 shrink-0 text-blue-400" />
+              <span>OAuth Verified! Please choose your unique username to complete registration.</span>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Account Password
+                Desired Unique Username
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                  <Lock className="w-4 h-4" />
+                  <AtSign className="w-4 h-4" />
                 </span>
                 <input
-                  type="password"
+                  type="text"
                   required
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="At least 4 characters"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-xl py-3 pl-9 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={desiredUsername}
+                  onChange={(e) => setDesiredUsername(e.target.value)}
+                  placeholder="e.g. shadow_striker, alex_99"
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-xl py-3 pl-9 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                 />
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                3-20 characters (letters, numbers, and underscores). Must be unique.
+              </p>
             </div>
 
             <button
@@ -219,10 +195,10 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-900/30 transition flex items-center justify-center gap-2 text-sm"
             >
               {loading ? (
-                <span>Authenticating Credentials...</span>
+                <span>Registering Username...</span>
               ) : (
                 <>
-                  <span>Authenticate & Enter</span>
+                  <span>Claim Username & Enter</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
