@@ -19,15 +19,15 @@ export interface TokenPayload {
  * Prioritizes OAUTH_BASE_URL and APP_URL, falling back to request headers or localhost.
  */
 export function getAppUrl(req?: NextRequest): string {
+  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
+    return process.env.APP_URL.replace(/\/$/, '');
+  }
   if (req) {
     const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
     const proto = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
     if (host) {
       return `${proto}://${host}`.replace(/\/$/, '');
     }
-  }
-  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
-    return process.env.APP_URL.replace(/\/$/, '');
   }
   return 'http://localhost:3000';
 }
@@ -107,32 +107,31 @@ export function setAuthCookies(
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
 
-  let isSecure = false;
+  let isHttps = process.env.NODE_ENV === 'production';
   if (req) {
+    const proto = req.headers.get('x-forwarded-proto');
     const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
-    const proto = req.headers.get('x-forwarded-proto') || '';
-    isSecure = proto === 'https' || (!host.includes('localhost') && !host.includes('127.0.0.1'));
-  } else {
-    isSecure = process.env.NODE_ENV === 'production';
+    if (proto === 'https' || (!host.includes('localhost') && !host.includes('127.0.0.1'))) {
+      isHttps = true;
+    }
   }
 
-  const sameSite = isSecure ? 'none' : 'lax';
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: (isHttps ? 'none' : 'lax') as 'none' | 'lax',
+    path: '/',
+  };
 
   // Access Token Cookie (15 mins)
   response.cookies.set('access_token', accessToken, {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite,
-    path: '/',
+    ...cookieOptions,
     maxAge: 60 * 15
   });
 
   // Refresh Token Cookie (7 days)
   response.cookies.set('refresh_token', refreshToken, {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite,
-    path: '/',
+    ...cookieOptions,
     maxAge: 60 * 60 * 24 * 7
   });
 

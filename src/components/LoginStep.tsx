@@ -14,6 +14,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showRedirectInfo, setShowRedirectInfo] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [pendingOAuthUser, setPendingOAuthUser] = useState<any>(null);
 
   const devCallbackUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-o67dfueucobbxfqmdxf65h-251519709486.asia-southeast1.run.app'}/api/auth/callback`;
 
@@ -24,6 +25,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
         if (payload) {
           if (payload.needsUsername || !payload.username) {
             // New user via OAuth -> Show "Choose Unique Username" screen
+            setPendingOAuthUser(payload);
             setStepMode('choose_username');
             setErrorMsg(null);
           } else {
@@ -81,7 +83,10 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
       const res = await fetch('/api/auth/username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanName })
+        body: JSON.stringify({
+          username: cleanName,
+          oauthId: pendingOAuthUser?.oauthId
+        })
       });
       const data = await res.json();
 

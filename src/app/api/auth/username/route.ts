@@ -5,7 +5,7 @@ import { initMongoDB, setUniqueUsername, findUserByOAuthId } from '@/db/mongo';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { username } = body;
+    const { username, oauthId: bodyOAuthId } = body;
 
     if (!username || typeof username !== 'string') {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
@@ -25,20 +25,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!tokenPayload || !tokenPayload.oauthId) {
+    const targetOAuthId = tokenPayload?.oauthId || bodyOAuthId;
+
+    if (!targetOAuthId) {
       return NextResponse.json({ error: 'Authentication session expired. Please sign in with Google or Discord again.' }, { status: 401 });
     }
 
     await initMongoDB();
 
     // Register and set unique username in database / memory
-    const updatedUser = await setUniqueUsername(tokenPayload.oauthId, username);
+    const updatedUser = await setUniqueUsername(targetOAuthId, username);
 
     const cleanUsername = username.trim().toLowerCase();
     const avatarUrl = updatedUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
 
     const userObj = {
-      oauthId: tokenPayload.oauthId,
+      oauthId: targetOAuthId,
       username: cleanUsername,
       authProvider: updatedUser.authProvider,
       avatarUrl,
