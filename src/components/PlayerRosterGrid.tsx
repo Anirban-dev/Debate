@@ -17,8 +17,8 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
 }) => {
   const { players, timer } = roomState;
 
-  const team1Players = Object.values(players).filter(p => p.role === 'player' && p.team === 'team1');
-  const team2Players = Object.values(players).filter(p => p.role === 'player' && p.team === 'team2');
+  const team1Players = (Object.values(players) as Player[]).filter(p => p.role === 'player' && p.team === 'team1');
+  const team2Players = (Object.values(players) as Player[]).filter(p => p.role === 'player' && p.team === 'team2');
 
   const renderPlayerCard = (player: Player) => {
     const isSelf = currentUser?.username === player.username;

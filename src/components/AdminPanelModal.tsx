@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MatchRoomState, TeamId, PlayerRole } from '../types';
+import { MatchRoomState, TeamId, PlayerRole, Player } from '../types';
 import { Shield, X, Users, Clock, AlertTriangle, Plus, Trash2, VolumeX, VideoOff, Check, RotateCcw } from 'lucide-react';
 
 interface AdminPanelModalProps {
@@ -164,7 +164,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
           {/* Active Connected Players List */}
           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-            {Object.values(players).map((player) => (
+            {(Object.values(players) as Player[]).map((player) => (
               <div
                 key={player.username}
                 className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs"

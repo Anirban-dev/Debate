@@ -199,7 +199,7 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
                 className="bg-slate-900 border border-slate-700 rounded-md text-xs text-white px-2 py-1 focus:outline-none"
               >
                 <option value="">-- None Selected --</option>
-                {Object.values(roomState.players)
+                {(Object.values(roomState.players) as Player[])
                   .filter(p => p.role === 'player')
                   .map(p => (
                     <option key={p.username} value={p.username}>
