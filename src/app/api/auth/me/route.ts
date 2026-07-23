@@ -1,70 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken, verifyRefreshToken, setAuthCookies } from '@/lib/auth';
-import { initMongoDB, findUserByOAuthId } from '@/db/mongo';
+import { auth } from '@/auth';
+import { NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    let payload = null;
-    const accessToken = req.cookies.get('access_token')?.value;
+    const session = await auth();
 
-    if (accessToken) {
-      payload = verifyAccessToken(accessToken);
-    }
-
-    if (!payload) {
-      const refreshToken = req.cookies.get('refresh_token')?.value;
-      if (refreshToken) {
-        payload = verifyRefreshToken(refreshToken);
-      }
-    }
-
-    if (!payload || !payload.oauthId) {
-      return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
-    }
-
-    await initMongoDB();
-    const dbUser = await findUserByOAuthId(payload.oauthId);
-
-    const activeUsername = dbUser?.username || payload.username;
-    const isComplete = dbUser ? (dbUser.isProfileComplete && !!activeUsername) : (payload.isProfileComplete && !!activeUsername);
-
-    if (isComplete && activeUsername) {
-      const userObj = {
-        username: activeUsername,
-        authProvider: payload.authProvider,
-        avatarUrl: payload.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${activeUsername}`
-      };
-
-      const response = NextResponse.json({
+    if (session?.user) {
+      const rawName = session.user.name || session.user.email?.split('@')[0] || 'player';
+      const cleanUsername = rawName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
+      const avatarUrl = session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
+      
+      return NextResponse.json({
         authenticated: true,
-        needsUsername: false,
-        user: userObj
+        user: {
+          username: cleanUsername,
+          authProvider: 'nextauth',
+          avatarUrl
+        }
       });
-
-      setAuthCookies(response, {
-        oauthId: payload.oauthId,
-        username: activeUsername,
-        email: payload.email,
-        authProvider: payload.authProvider,
-        avatarUrl: userObj.avatarUrl,
-        isProfileComplete: true
-      });
-
-      return response;
     }
 
-    // User is OAuth authenticated but needs to set a unique username
-    return NextResponse.json({
-      authenticated: true,
-      needsUsername: true,
-      oauthUser: {
-        oauthId: payload.oauthId,
-        email: payload.email,
-        authProvider: payload.authProvider
-      }
-    });
+    return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   } catch (err: any) {
-    console.error('Session check error:', err);
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   }
 }

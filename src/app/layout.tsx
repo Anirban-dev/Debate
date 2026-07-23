@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'MatchLobby - Real-Time Tournament & Debate Platform',
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
