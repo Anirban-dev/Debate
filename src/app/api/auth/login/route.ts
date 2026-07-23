@@ -5,11 +5,17 @@ import { setAuthCookies } from '@/lib/auth';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { username, authProvider = 'direct' } = body;
+    const { username, password, authProvider = 'direct' } = body;
     const cleanUsername = (username || '').trim().toLowerCase();
 
     if (!cleanUsername) {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
+    }
+
+    if (authProvider === 'direct') {
+      if (!password || password.length < 4) {
+        return NextResponse.json({ error: 'Password of at least 4 characters is required for account authentication.' }, { status: 400 });
+      }
     }
 
     await initMongoDB();

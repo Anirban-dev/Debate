@@ -11,6 +11,7 @@ import { ActiveSpeakerStage } from '@/components/ActiveSpeakerStage';
 import { SharedNotesPad } from '@/components/SharedNotesPad';
 import { ChatPanel } from '@/components/ChatPanel';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
+import { Video, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -27,6 +28,9 @@ export default function Home() {
   const [currentRoomId, setCurrentRoomId] = useState<string>('main-lobby');
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+
+  // View navigation tab in match lobby: 'stage' | 'notes' | 'chat' | 'all'
+  const [activeViewTab, setActiveViewTab] = useState<'stage' | 'notes' | 'chat' | 'all'>('stage');
 
   // Check active session on mount
   useEffect(() => {
@@ -52,7 +56,7 @@ export default function Home() {
     let socketInstance: Socket | null = null;
 
     const initSocket = async () => {
-      // First ensure Next.js API socket server is initialized
+      // Ensure Next.js API socket server is initialized
       await fetch('/api/socket/io');
 
       socketInstance = io({
@@ -62,7 +66,7 @@ export default function Home() {
       });
 
       socketInstance.on('connect', () => {
-        console.log('Connected to Next.js Socket server:', socketInstance?.id);
+        console.log('Connected to Socket server:', socketInstance?.id);
       });
 
       socketInstance.on('joined_room_ack', (data: { roomState: MatchRoomState; assignedPlayer: Player }) => {
@@ -134,7 +138,7 @@ export default function Home() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
-      // Ignore network errors on logout
+      // Ignore network errors
     }
     setAuthUser(null);
     setCurrentUser(null);
@@ -196,17 +200,12 @@ export default function Home() {
     socket.emit('admin_update_player', { targetUsername, ...updates });
   };
 
-  const handleAdminUpdateRoster = (roster: { username: string; team: TeamId; personalizedTime?: number }[]) => {
-    if (!socket) return;
-    socket.emit('admin_update_roster', { roster });
-  };
-
   // STEP 1: LOGIN PAGE
   if (appStep === 'login') {
     return <LoginStep onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // STEP 2: MODE SELECTION PAGE (CREATE A GAME vs ENTER A GAME)
+  // STEP 2: MODE SELECTION PAGE
   if (appStep === 'mode_select' && authUser) {
     return (
       <ModeSelectionStep
@@ -231,43 +230,153 @@ export default function Home() {
         />
       )}
 
-      {/* Main Workspace Body */}
+      {/* Simplified Navigation View Switcher Bar */}
       {roomState && (
-        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT COLUMN: Dual Team Lobbies & Video/Voice Roster (4 Cols) */}
-          <div className="lg:col-span-4 space-y-6">
-            <PlayerRosterGrid
-              roomState={roomState}
-              currentUser={currentUser}
-              onToggleMedia={handleToggleMedia}
-              onAdminUpdatePlayer={handleAdminUpdatePlayer}
-            />
-          </div>
+        <div className="bg-slate-900/80 border-b border-slate-800 backdrop-blur-md sticky top-[65px] z-20">
+          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto">
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setActiveViewTab('stage')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeViewTab === 'stage'
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Video className="w-4 h-4" />
+                <span>Stage & Video Grid</span>
+              </button>
 
-          {/* CENTER COLUMN: Active Speaker Stage & Shared Multi-Page Notes (5 Cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            <ActiveSpeakerStage
-              roomState={roomState}
-              currentUser={currentUser}
-            />
+              <button
+                onClick={() => setActiveViewTab('notes')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeViewTab === 'notes'
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>Shared Notes</span>
+              </button>
 
-            <SharedNotesPad
-              roomState={roomState}
-              currentUser={currentUser}
-              onUpdateNotePage={handleUpdateNotePage}
-              onAddNotePage={handleAddNotePage}
-              onSetActivePage={handleSetActiveNotePage}
-            />
-          </div>
+              <button
+                onClick={() => setActiveViewTab('chat')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeViewTab === 'chat'
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Match Chat</span>
+              </button>
 
-          {/* RIGHT COLUMN: 3-Session Live Chat Panel (3 Cols) */}
-          <div className="lg:col-span-3">
-            <ChatPanel
-              roomState={roomState}
-              currentUser={currentUser}
-              onSendChat={handleSendChat}
-            />
+              <button
+                onClick={() => setActiveViewTab('all')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeViewTab === 'all'
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span className="hidden sm:inline">All-in-One Dashboard</span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400 font-medium hidden md:block">
+              Click <span className="text-blue-400 font-semibold">Video</span> button in roster to turn webcam feed ON/OFF
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Main Workspace View Body */}
+      {roomState && (
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+          {/* VIEW 1: STAGE & VIDEO GRID (DEFAULT) */}
+          {activeViewTab === 'stage' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7 space-y-6">
+                <ActiveSpeakerStage
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onToggleMedia={handleToggleMedia}
+                />
+              </div>
+
+              <div className="lg:col-span-5 space-y-6">
+                <PlayerRosterGrid
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onToggleMedia={handleToggleMedia}
+                  onAdminUpdatePlayer={handleAdminUpdatePlayer}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* VIEW 2: SHARED NOTES */}
+          {activeViewTab === 'notes' && (
+            <div className="max-w-4xl mx-auto">
+              <SharedNotesPad
+                roomState={roomState}
+                currentUser={currentUser}
+                onUpdateNotePage={handleUpdateNotePage}
+                onAddNotePage={handleAddNotePage}
+                onSetActivePage={handleSetActiveNotePage}
+              />
+            </div>
+          )}
+
+          {/* VIEW 3: MATCH CHAT */}
+          {activeViewTab === 'chat' && (
+            <div className="max-w-2xl mx-auto">
+              <ChatPanel
+                roomState={roomState}
+                currentUser={currentUser}
+                onSendChat={handleSendChat}
+              />
+            </div>
+          )}
+
+          {/* VIEW 4: ALL-IN-ONE DASHBOARD */}
+          {activeViewTab === 'all' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-4 space-y-6">
+                <PlayerRosterGrid
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onToggleMedia={handleToggleMedia}
+                  onAdminUpdatePlayer={handleAdminUpdatePlayer}
+                />
+              </div>
+
+              <div className="lg:col-span-5 space-y-6">
+                <ActiveSpeakerStage
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onToggleMedia={handleToggleMedia}
+                />
+
+                <SharedNotesPad
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onUpdateNotePage={handleUpdateNotePage}
+                  onAddNotePage={handleAddNotePage}
+                  onSetActivePage={handleSetActiveNotePage}
+                />
+              </div>
+
+              <div className="lg:col-span-3">
+                <ChatPanel
+                  roomState={roomState}
+                  currentUser={currentUser}
+                  onSendChat={handleSendChat}
+                />
+              </div>
+            </div>
+          )}
         </main>
       )}
 
@@ -278,7 +387,6 @@ export default function Home() {
           onClose={() => setIsAdminPanelOpen(false)}
           onControlTimer={handleControlTimer}
           onAdminUpdatePlayer={handleAdminUpdatePlayer}
-          onAdminUpdateRoster={handleAdminUpdateRoster}
         />
       )}
     </div>
