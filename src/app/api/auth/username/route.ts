@@ -1,65 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken, verifyRefreshToken, setAuthCookies } from '@/lib/auth';
-import { initMongoDB, setUniqueUsername, findUserByOAuthId } from '@/db/mongo';
+import { auth } from '@/auth';
+import { initMongoDB, setUniqueUsername } from '@/db/mongo';
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await auth();
+
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please sign in with Google or Discord first.' },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
-    const { username, oauthId: bodyOAuthId } = body;
+    const { username } = body;
 
     if (!username || typeof username !== 'string') {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
     }
 
-    // Extract session token
-    let tokenPayload = null;
-    const accessToken = req.cookies.get('access_token')?.value;
-    if (accessToken) {
-      tokenPayload = verifyAccessToken(accessToken);
-    }
-
-    if (!tokenPayload) {
-      const refreshToken = req.cookies.get('refresh_token')?.value;
-      if (refreshToken) {
-        tokenPayload = verifyRefreshToken(refreshToken);
-      }
-    }
-
-    const targetOAuthId = tokenPayload?.oauthId || bodyOAuthId;
-
-    if (!targetOAuthId) {
-      return NextResponse.json({ error: 'Authentication session expired. Please sign in with Google or Discord again.' }, { status: 401 });
-    }
+    const oauthId = session.user.id || session.user.email || 'user_unknown';
 
     await initMongoDB();
 
-    // Register and set unique username in database / memory
-    const updatedUser = await setUniqueUsername(targetOAuthId, username);
+    const updatedUser = await setUniqueUsername(oauthId, username);
 
     const cleanUsername = username.trim().toLowerCase();
-    const avatarUrl = updatedUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
+    const avatarUrl = updatedUser.avatarUrl || session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
 
-    const userObj = {
-      oauthId: targetOAuthId,
-      username: cleanUsername,
-      authProvider: updatedUser.authProvider,
-      avatarUrl,
-      isProfileComplete: true
-    };
-
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
       user: {
         username: cleanUsername,
-        authProvider: updatedUser.authProvider,
-        avatarUrl
-      }
+        authProvider: 'nextauth',
+        avatarUrl,
+      },
     });
-
-    // Re-issue updated cookies with profile completed
-    setAuthCookies(response, userObj, req);
-
-    return response;
   } catch (err: any) {
     console.error('Set username error:', err);
     return NextResponse.json({ error: err.message || 'Failed to claim username' }, { status: 400 });
