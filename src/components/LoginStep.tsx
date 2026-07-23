@@ -15,8 +15,10 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
   const [showRedirectInfo, setShowRedirectInfo] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [pendingOAuthUser, setPendingOAuthUser] = useState<any>(null);
+  const [guestUsername, setGuestUsername] = useState('');
 
-  const devCallbackUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-o67dfueucobbxfqmdxf65h-251519709486.asia-southeast1.run.app'}/api/auth/callback`;
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const devCallbackUrl = `${currentOrigin}/api/auth/callback`;
 
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
@@ -102,6 +104,38 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleGuestLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = guestUsername.trim().toLowerCase();
+
+    if (!cleanName || cleanName.length < 3) {
+      setErrorMsg('Username must be at least 3 characters long.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch('/api/auth/guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanName })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to enter as guest.');
+      }
+
+      onLoginSuccess(data.user);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error entering as guest');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedUrl(text);
@@ -139,7 +173,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* STEP 1: OAuth Social Buttons Only */}
+        {/* STEP 1: OAuth Social Buttons + Quick Handle Sign-in */}
         {stepMode === 'oauth_select' && (
           <div className="space-y-4 pt-2">
             <button
@@ -167,6 +201,54 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               <span>Continue with Discord</span>
             </button>
 
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-800"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-slate-900 px-3 text-slate-500 font-semibold tracking-wider">
+                  or enter player handle directly
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Guest / Direct Handle Entry */}
+            <form onSubmit={handleGuestLogin} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Instant Handle Sign-In
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                    <AtSign className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={guestUsername}
+                    onChange={(e) => setGuestUsername(e.target.value)}
+                    placeholder="Enter your username (e.g. alex_99)"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-xl py-2.5 pl-9 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 px-4 rounded-xl border border-slate-700 transition flex items-center justify-center gap-2 text-xs"
+              >
+                {loading ? (
+                  <span>Logging in...</span>
+                ) : (
+                  <>
+                    <span>Enter Lobby Instantly</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </form>
+
             <div className="pt-2 flex flex-col items-center gap-2">
               <button
                 type="button"
@@ -180,12 +262,27 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               {showRedirectInfo && (
                 <div className="w-full bg-slate-950/90 border border-slate-800 p-3.5 rounded-2xl text-[11px] text-slate-300 space-y-2 mt-1">
                   <p className="font-semibold text-blue-400">Authorized Redirect URIs for OAuth Console:</p>
-                  <p className="text-slate-400">
-                    Add the following URI to your <strong>Google Cloud Console</strong> &rarr; Credentials &rarr; OAuth 2.0 Client ID:
+                  <p className="text-slate-400 leading-relaxed">
+                    If using Google OAuth, add the EXACT URI below under <strong>Authorized redirect URIs</strong> in Google Cloud Console &rarr; Credentials:
                   </p>
                   
-                  {/* Localhost Callback URI */}
+                  {/* Active Callback URI */}
                   <div className="space-y-1">
+                    <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">Required Active Redirect URI:</span>
+                    <div className="flex items-center justify-between bg-slate-900 border border-amber-500/50 rounded-lg p-2 font-mono text-[10px] text-amber-300 overflow-x-auto">
+                      <span className="truncate mr-2 font-bold">{devCallbackUrl}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(devCallbackUrl)}
+                        className="text-slate-400 hover:text-white shrink-0 p-1 bg-slate-800 rounded"
+                      >
+                        {copiedUrl === devCallbackUrl ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Localhost Callback URI */}
+                  <div className="space-y-1 pt-1">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Localhost (Standard):</span>
                     <div className="flex items-center justify-between bg-slate-900 border border-slate-700/80 rounded-lg p-2 font-mono text-[10px] text-emerald-400 overflow-x-auto">
                       <span className="truncate mr-2">http://localhost:3000/api/auth/callback</span>
@@ -199,23 +296,8 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
                     </div>
                   </div>
 
-                  {/* Active Cloud App Callback URI */}
-                  <div className="space-y-1 pt-1">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Preview / Cloud URL:</span>
-                    <div className="flex items-center justify-between bg-slate-900 border border-slate-700/80 rounded-lg p-2 font-mono text-[10px] text-blue-300 overflow-x-auto">
-                      <span className="truncate mr-2">{devCallbackUrl}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(devCallbackUrl)}
-                        className="text-slate-400 hover:text-white shrink-0 p-1 bg-slate-800 rounded"
-                      >
-                        {copiedUrl === devCallbackUrl ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800">
-                    💡 Tip: Set <code className="text-blue-300">APP_URL=http://localhost:3000</code> in your environment variables if you want to force all OAuth callback requests to use localhost.
+                  <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800 leading-relaxed">
+                    💡 Note: Authorized JavaScript origins only permits domain origin. You MUST also add the path <code className="text-blue-300">/api/auth/callback</code> to Authorized Redirect URIs!
                   </p>
                 </div>
               )}
@@ -224,7 +306,7 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
             <div className="pt-1 text-center text-[11px] text-slate-500 space-y-1">
               <p className="flex items-center justify-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                No passwords required &bull; Secured with Google & Discord OAuth
+                Instant Access Available &bull; Secured with Google & Discord OAuth
               </p>
             </div>
           </div>
