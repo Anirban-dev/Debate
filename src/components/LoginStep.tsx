@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, ArrowRight, Disc as DiscordIcon, User, ShieldCheck } from 'lucide-react';
 
 interface LoginStepProps {
@@ -10,6 +10,19 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
   const [provider, setProvider] = useState<'direct' | 'google' | 'discord'>('direct');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOAuthMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'OAUTH_AUTH_SUCCESS') {
+        const user = event.data.user;
+        if (user && user.username) {
+          onLoginSuccess(user);
+        }
+      }
+    };
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, [onLoginSuccess]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

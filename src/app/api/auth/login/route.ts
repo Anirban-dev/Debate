@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initMongoDB, isMongoConnected, upsertUser } from '@/db/mongo';
+import { setAuthCookies } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,14 +18,21 @@ export async function POST(req: NextRequest) {
       await upsertUser(cleanUsername, authProvider);
     }
 
-    return NextResponse.json({
+    const user = {
+      username: cleanUsername,
+      authProvider,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`
+    };
+
+    const response = NextResponse.json({
       success: true,
-      user: {
-        username: cleanUsername,
-        authProvider,
-        avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`
-      }
+      user
     });
+
+    // Attach HTTP-only secure Access Token (15m) and Refresh Token (7d) cookies
+    setAuthCookies(response, user);
+
+    return response;
   } catch (err: any) {
     console.error('Login error:', err);
     return NextResponse.json({ error: err.message || 'Authentication failed' }, { status: 500 });

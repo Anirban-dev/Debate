@@ -28,6 +28,25 @@ export default function Home() {
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
+  // Check active session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            setAuthUser(data.user);
+            setAppStep('mode_select');
+          }
+        }
+      } catch (err) {
+        // Session not active, remain on login screen
+      }
+    };
+    checkSession();
+  }, []);
+
   // Initialize Socket.IO connection
   useEffect(() => {
     let socketInstance: Socket | null = null;
@@ -111,7 +130,12 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      // Ignore network errors on logout
+    }
     setAuthUser(null);
     setCurrentUser(null);
     setRoomState(null);
