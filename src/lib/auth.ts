@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const DEFAULT_JWT_SECRET = process.env.JWT_SECRET || 'matchlobby-default-access-jwt-secret-key-32bytes!';
 const DEFAULT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'matchlobby-default-refresh-jwt-secret-key-32bytes!';
@@ -12,6 +12,27 @@ export interface TokenPayload {
   avatarUrl?: string;
   isProfileComplete?: boolean;
   tokenType?: 'access' | 'refresh';
+}
+
+/**
+ * Dynamically resolves the active application URL for OAuth redirects and app routes.
+ * Prioritizes OAUTH_BASE_URL and APP_URL, falling back to request headers or localhost.
+ */
+export function getAppUrl(req?: NextRequest): string {
+  if (process.env.OAUTH_BASE_URL) {
+    return process.env.OAUTH_BASE_URL.replace(/\/$/, '');
+  }
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/$/, '');
+  }
+  if (req) {
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  }
+  return 'http://localhost:3000';
 }
 
 /**
@@ -90,11 +111,11 @@ export function setAuthCookies(
 
   const isProd = process.env.NODE_ENV === 'production';
 
-  // Access Token Cookie (15 mins)
+  // Access Token Cookie (15 mins) - configured for cross-origin iframe compatibility
   response.cookies.set('access_token', accessToken, {
     httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
+    secure: true,
+    sameSite: 'none',
     path: '/',
     maxAge: 60 * 15 // 15 minutes
   });
@@ -102,8 +123,8 @@ export function setAuthCookies(
   // Refresh Token Cookie (7 days)
   response.cookies.set('refresh_token', refreshToken, {
     httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
+    secure: true,
+    sameSite: 'none',
     path: '/',
     maxAge: 60 * 60 * 24 * 7 // 7 days
   });

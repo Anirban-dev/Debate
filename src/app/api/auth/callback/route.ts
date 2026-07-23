@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initMongoDB, isMongoConnected, createOrUpdateOAuthUser, findUserByOAuthId } from '@/db/mongo';
-import { setAuthCookies } from '@/lib/auth';
+import { initMongoDB, createOrUpdateOAuthUser } from '@/db/mongo';
+import { setAuthCookies, getAppUrl } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -8,8 +8,8 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get('error');
   const stateParam = searchParams.get('state') || '';
 
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  const redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/callback`;
+  const appUrl = getAppUrl(req);
+  const redirectUri = `${appUrl}/api/auth/callback`;
 
   const providerFromState = stateParam.split(':')[0] || 'google';
 
@@ -72,6 +72,8 @@ export async function GET(req: NextRequest) {
             authProvider: 'google',
             avatarUrl: userInfo.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${googleId}`
           });
+        } else {
+          console.error('Google OAuth token error:', tokenData);
         }
       }
     } else if (providerFromState === 'discord') {
@@ -110,6 +112,8 @@ export async function GET(req: NextRequest) {
               ? `https://cdn.discordapp.com/avatars/${userInfo.id}/${userInfo.avatar}.png`
               : `https://api.dicebear.com/7.x/bottts/svg?seed=${discordId}`
           });
+        } else {
+          console.error('Discord OAuth token error:', tokenData);
         }
       }
     }
@@ -141,8 +145,6 @@ export async function GET(req: NextRequest) {
     needsUsername
   };
 
-  const targetOrigin = appUrl;
-
   const successHtml = `
     <!DOCTYPE html>
     <html>
@@ -156,7 +158,7 @@ export async function GET(req: NextRequest) {
             window.opener.postMessage({
               type: 'OAUTH_AUTH_SUCCESS',
               user: ${JSON.stringify(authUserPayload)}
-            }, '${targetOrigin}');
+            }, '*');
             window.close();
           } else {
             window.location.href = '/';

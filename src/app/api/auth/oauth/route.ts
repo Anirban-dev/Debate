@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { getAppUrl } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const provider = searchParams.get('provider');
 
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  const redirectUri = `${appUrl.replace(/\/$/, '')}/api/auth/callback`;
+  const appUrl = getAppUrl(req);
+  const redirectUri = `${appUrl}/api/auth/callback`;
 
   // Cryptographically secure random nonce for Anti-CSRF protection
   const stateNonce = crypto.randomUUID();
@@ -18,7 +19,8 @@ export async function GET(req: NextRequest) {
     if (!clientId || !clientSecret) {
       return NextResponse.json({
         configured: false,
-        message: 'Google OAuth environment variables (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) are required in .env.'
+        redirectUri,
+        message: 'Google OAuth environment variables (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) are required.'
       });
     }
 
@@ -28,12 +30,12 @@ export async function GET(req: NextRequest) {
       stateValue
     )}&prompt=select_account`;
 
-    const res = NextResponse.json({ configured: true, authUrl: googleAuthUrl });
-    // Secure HTTP-Only Cookie to prevent CSRF attacks
+    const res = NextResponse.json({ configured: true, authUrl: googleAuthUrl, redirectUri });
+    // Secure HTTP-Only Cookie to prevent CSRF attacks in cross-origin iframe context
     res.cookies.set('oauth_state', stateValue, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       path: '/',
       maxAge: 60 * 10 // 10 minutes expiry
     });
@@ -46,7 +48,8 @@ export async function GET(req: NextRequest) {
     if (!clientId || !clientSecret) {
       return NextResponse.json({
         configured: false,
-        message: 'Discord OAuth environment variables (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET) are required in .env.'
+        redirectUri,
+        message: 'Discord OAuth environment variables (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET) are required.'
       });
     }
 
@@ -56,11 +59,11 @@ export async function GET(req: NextRequest) {
       redirectUri
     )}&response_type=code&scope=identify%20email&state=${encodeURIComponent(stateValue)}`;
 
-    const res = NextResponse.json({ configured: true, authUrl: discordAuthUrl });
+    const res = NextResponse.json({ configured: true, authUrl: discordAuthUrl, redirectUri });
     res.cookies.set('oauth_state', stateValue, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       path: '/',
       maxAge: 60 * 10
     });

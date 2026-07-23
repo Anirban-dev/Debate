@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Disc as DiscordIcon, ShieldCheck, UserCheck, AtSign, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Disc as DiscordIcon, ShieldCheck, UserCheck, AtSign, CheckCircle2, Copy, Info } from 'lucide-react';
 
 interface LoginStepProps {
   onLoginSuccess: (user: { username: string; authProvider: string; avatarUrl: string }) => void;
@@ -12,6 +12,10 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
   const [desiredUsername, setDesiredUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showRedirectInfo, setShowRedirectInfo] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+
+  const devCallbackUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-o67dfueucobbxfqmdxf65h-251519709486.asia-southeast1.run.app'}/api/auth/callback`;
 
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
@@ -49,11 +53,13 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
       } else {
         setErrorMsg(
           data.message ||
-            `Please configure your ${selectedProvider.toUpperCase()}_CLIENT_ID and ${selectedProvider.toUpperCase()}_CLIENT_SECRET in environment settings to enable ${selectedProvider} OAuth.`
+            `Please configure ${selectedProvider.toUpperCase()}_CLIENT_ID and ${selectedProvider.toUpperCase()}_CLIENT_SECRET in your environment settings.`
         );
+        setShowRedirectInfo(true);
       }
     } catch (err: any) {
       setErrorMsg(`Failed to initiate ${selectedProvider} OAuth login.`);
+      setShowRedirectInfo(true);
     } finally {
       setLoading(false);
     }
@@ -91,6 +97,12 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedUrl(text);
+    setTimeout(() => setCopiedUrl(null), 2000);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden">
       {/* Background Lighting */}
@@ -117,8 +129,8 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
         </div>
 
         {errorMsg && (
-          <div className="text-xs text-red-400 bg-red-950/80 p-3 rounded-xl border border-red-800/80 leading-relaxed">
-            {errorMsg}
+          <div className="text-xs text-red-400 bg-red-950/80 p-3 rounded-xl border border-red-800/80 leading-relaxed space-y-1">
+            <p className="font-semibold">{errorMsg}</p>
           </div>
         )}
 
@@ -150,7 +162,61 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               <span>Continue with Discord</span>
             </button>
 
-            <div className="pt-3 text-center text-[11px] text-slate-500 space-y-1">
+            <div className="pt-2 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRedirectInfo(!showRedirectInfo)}
+                className="text-xs text-slate-400 hover:text-blue-400 underline flex items-center gap-1 transition"
+              >
+                <Info className="w-3.5 h-3.5 text-blue-400" />
+                <span>Google / Discord OAuth Redirect URI Setup</span>
+              </button>
+
+              {showRedirectInfo && (
+                <div className="w-full bg-slate-950/90 border border-slate-800 p-3.5 rounded-2xl text-[11px] text-slate-300 space-y-2 mt-1">
+                  <p className="font-semibold text-blue-400">Authorized Redirect URIs for OAuth Console:</p>
+                  <p className="text-slate-400">
+                    Add the following URI to your <strong>Google Cloud Console</strong> &rarr; Credentials &rarr; OAuth 2.0 Client ID:
+                  </p>
+                  
+                  {/* Localhost Callback URI */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Localhost (Standard):</span>
+                    <div className="flex items-center justify-between bg-slate-900 border border-slate-700/80 rounded-lg p-2 font-mono text-[10px] text-emerald-400 overflow-x-auto">
+                      <span className="truncate mr-2">http://localhost:3000/api/auth/callback</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard('http://localhost:3000/api/auth/callback')}
+                        className="text-slate-400 hover:text-white shrink-0 p-1 bg-slate-800 rounded"
+                      >
+                        {copiedUrl === 'http://localhost:3000/api/auth/callback' ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Active Cloud App Callback URI */}
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Preview / Cloud URL:</span>
+                    <div className="flex items-center justify-between bg-slate-900 border border-slate-700/80 rounded-lg p-2 font-mono text-[10px] text-blue-300 overflow-x-auto">
+                      <span className="truncate mr-2">{devCallbackUrl}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(devCallbackUrl)}
+                        className="text-slate-400 hover:text-white shrink-0 p-1 bg-slate-800 rounded"
+                      >
+                        {copiedUrl === devCallbackUrl ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800">
+                    💡 Tip: If you set <code className="text-blue-300">OAUTH_BASE_URL=http://localhost:3000</code> in environment variables, the app will always send the localhost callback URI to Google/Discord.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-1 text-center text-[11px] text-slate-500 space-y-1">
               <p className="flex items-center justify-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 No passwords required &bull; Secured with Google & Discord OAuth
