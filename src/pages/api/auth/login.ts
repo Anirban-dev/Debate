@@ -1,14 +1,17 @@
-import { NextResponse } from 'next/server';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { initMongoDB, isMongoConnected, upsertUser } from '@/db/mongo';
 
-export async function POST(request: Request) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   try {
-    const body = await request.json();
-    const { username, authProvider = 'direct' } = body;
+    const { username, authProvider = 'direct' } = req.body || {};
     const cleanUsername = (username || '').trim().toLowerCase();
 
     if (!cleanUsername) {
-      return NextResponse.json({ error: "Username is required" }, { status: 400 });
+      return res.status(400).json({ error: "Username is required" });
     }
 
     await initMongoDB();
@@ -17,7 +20,7 @@ export async function POST(request: Request) {
       await upsertUser(cleanUsername, authProvider);
     }
 
-    return NextResponse.json({
+    return res.status(200).json({
       success: true,
       user: {
         username: cleanUsername,
@@ -27,6 +30,6 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('Login error:', err);
-    return NextResponse.json({ error: err.message || 'Authentication failed' }, { status: 500 });
+    return res.status(500).json({ error: err.message || 'Authentication failed' });
   }
 }

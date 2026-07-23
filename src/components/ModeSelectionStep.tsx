@@ -465,7 +465,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {activeRoomsList.length === 0 ? (
                   <p className="text-xs text-slate-500 italic p-3 text-center bg-slate-950/40 rounded-xl">
-                    No active room instances found. You can enter 'main-lobby' or create a new game room above.
+                    No active room instances found. You can enter &apos;main-lobby&apos; or create a new game room above.
                   </p>
                 ) : (
                   activeRoomsList.map((room) => (
