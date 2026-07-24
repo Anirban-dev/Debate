@@ -2,7 +2,7 @@ import { Server as ServerIO } from 'socket.io';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { Server as NetServer } from 'http';
 import { activeRooms, createDefaultRoomState } from '@/lib/socketStore';
-import { ChatMessage, MatchRoomState, Player, SharedNotePage, TeamId } from '@/types';
+import { ChatMessage, MatchRoomState, Player, TeamId } from '@/types';
 
 export const config = {
   api: {
@@ -67,10 +67,11 @@ function startTimerLoop(io: ServerIO) {
         }
       }
 
-      if (timer.turnTimeRemaining <= 0 || 
-         (timer.activeTeam === "team1" && timer.team1TimeRemaining <= 0) ||
-         (timer.activeTeam === "team2" && timer.team2TimeRemaining <= 0)) {
-        
+      if (
+        timer.turnTimeRemaining <= 0 ||
+        (timer.activeTeam === "team1" && timer.team1TimeRemaining <= 0) ||
+        (timer.activeTeam === "team2" && timer.team2TimeRemaining <= 0)
+      ) {
         timer.isRunning = false;
         timer.autoMutedTriggered = true;
 
@@ -99,7 +100,10 @@ function startTimerLoop(io: ServerIO) {
   }, 1000);
 }
 
-const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { server: NetServer & { io?: ServerIO } } }) => {
+const ioHandler = (
+  req: NextApiRequest,
+  res: NextApiResponse & { socket: { server: NetServer & { io?: ServerIO } } }
+) => {
   if (!res.socket.server.io) {
     const httpServer: NetServer = res.socket.server as any;
     const io = new ServerIO(httpServer, {
@@ -126,6 +130,13 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         }
 
         const roomState = activeRooms[targetRoomId];
+
+        // Check if username is banned
+        if (roomState.bannedUsernames?.includes(rawUsername)) {
+          socket.emit("banned_error", { message: "You are banned from this lobby by the admin." });
+          return;
+        }
+
         currentUsername = rawUsername;
         currentRoomId = targetRoomId;
 
@@ -152,22 +163,24 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         }
 
         const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(rawUsername)}`;
-
         const existingPlayer = roomState.players[rawUsername];
+
         const playerObj: Player = {
           id: rawUsername,
           username: rawUsername,
           avatarUrl,
           role,
           team,
-          isMuted: existingPlayer ? existingPlayer.isMuted : false,
-          isVideoOff: existingPlayer ? existingPlayer.isVideoOff : false,
+          // Spectators do NOT have camera/mic permission:
+          isMuted: role === 'spectator' ? true : (existingPlayer ? existingPlayer.isMuted : false),
+          isVideoOff: role === 'spectator' ? true : (existingPlayer ? existingPlayer.isVideoOff : false),
           isMutedByAdmin: existingPlayer ? existingPlayer.isMutedByAdmin : false,
           isVideoOffByAdmin: existingPlayer ? existingPlayer.isVideoOffByAdmin : false,
           isOnline: true,
           timeLimitSeconds: personalizedTime,
           remainingSeconds: existingPlayer ? existingPlayer.remainingSeconds : personalizedTime,
-          authProvider: (payload.provider as any) || "direct"
+          authProvider: (payload.provider as any) || "direct",
+          joinedAt: existingPlayer?.joinedAt || Date.now()
         };
 
         roomState.players[rawUsername] = playerObj;
@@ -199,11 +212,43 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         io.to(targetRoomId).emit("room_state_update", roomState);
       });
 
+      // Spectators or Players leaving voluntarily
+      socket.on("leave_room", () => {
+        if (!currentRoomId || !currentUsername || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+
+        if (roomState.players[currentUsername]) {
+          roomState.players[currentUsername].isOnline = false;
+          updateSpectatorCount(roomState);
+
+          roomState.chatMessages.push({
+            id: `sys-leave-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: `👋 @${currentUsername} left the lobby.`,
+            timestamp: Date.now(),
+            isSystem: true
+          });
+
+          io.to(currentRoomId).emit("room_state_update", roomState);
+        }
+
+        socket.leave(currentRoomId);
+      });
+
+      // Media Toggles (Players only - Spectators blocked)
       socket.on("toggle_media", (payload: { username: string; mediaType: "mic" | "video"; value: boolean }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
         const player = roomState.players[payload.username];
         if (!player) return;
+
+        // Spectators do NOT have mic or video permissions!
+        if (player.role === 'spectator') {
+          return;
+        }
 
         if (payload.mediaType === "mic") {
           if (!player.isMutedByAdmin) player.isMuted = payload.value;
@@ -214,6 +259,7 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         io.to(currentRoomId).emit("room_state_update", roomState);
       });
 
+      // Chat Messages
       socket.on("send_chat", (payload: { senderUsername: string; channel: "global" | "team1" | "team2"; text: string }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
@@ -247,42 +293,25 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         io.to(currentRoomId).emit("room_state_update", roomState);
       });
 
-      socket.on("update_note_page", (payload: { pageIndex: number; title?: string; content?: string; username: string }) => {
+      // Secret Team Shared Notes Update (Team 1 or Team 2)
+      socket.on("update_team_notes", (payload: { teamId: TeamId; title?: string; content?: string; username: string }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
-        if (roomState.notesPages[payload.pageIndex]) {
-          const page = roomState.notesPages[payload.pageIndex];
-          if (payload.title !== undefined) page.title = payload.title;
-          if (payload.content !== undefined) page.content = payload.content;
-          page.lastEditedBy = payload.username;
-          page.updatedAt = Date.now();
+        const player = roomState.players[payload.username];
 
-          io.to(currentRoomId).emit("room_state_update", roomState);
+        // Only players assigned to that team can edit their team notes!
+        if (!player || player.role !== 'player' || player.team !== payload.teamId) {
+          socket.emit("chat_error", { message: "Only team members can edit their team strategy notes." });
+          return;
         }
-      });
 
-      socket.on("add_note_page", (payload: { username: string }) => {
-        if (!currentRoomId || !activeRooms[currentRoomId]) return;
-        const roomState = activeRooms[currentRoomId];
-        const newPageNum = roomState.notesPages.length + 1;
-        const newPage: SharedNotePage = {
-          pageNumber: newPageNum,
-          title: `Page ${newPageNum}: Untitled Note`,
-          content: `# Page ${newPageNum}\n\nStart typing shared match strategy here...`,
-          lastEditedBy: payload.username,
-          updatedAt: Date.now()
-        };
-        roomState.notesPages.push(newPage);
-        roomState.activePageIndex = roomState.notesPages.length - 1;
+        const note = roomState.teamNotes[payload.teamId];
+        if (note) {
+          if (payload.title !== undefined) note.title = payload.title;
+          if (payload.content !== undefined) note.content = payload.content;
+          note.lastEditedBy = payload.username;
+          note.updatedAt = Date.now();
 
-        io.to(currentRoomId).emit("room_state_update", roomState);
-      });
-
-      socket.on("set_active_note_page", (pageIndex: number) => {
-        if (!currentRoomId || !activeRooms[currentRoomId]) return;
-        const roomState = activeRooms[currentRoomId];
-        if (pageIndex >= 0 && pageIndex < roomState.notesPages.length) {
-          roomState.activePageIndex = pageIndex;
           io.to(currentRoomId).emit("room_state_update", roomState);
         }
       });
@@ -338,6 +367,7 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         io.to(currentRoomId).emit("room_state_update", roomState);
       });
 
+      // Admin update player / spectator
       socket.on("admin_update_player", (payload: { targetUsername: string; team?: TeamId; role?: 'player' | 'spectator'; isMutedByAdmin?: boolean; isVideoOffByAdmin?: boolean; personalizedTime?: number }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
@@ -345,7 +375,14 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
         if (!player) return;
 
         if (payload.team) player.team = payload.team;
-        if (payload.role) player.role = payload.role;
+        if (payload.role) {
+          player.role = payload.role;
+          if (payload.role === 'spectator') {
+            player.team = undefined;
+            player.isMuted = true;
+            player.isVideoOff = true;
+          }
+        }
         if (payload.isMutedByAdmin !== undefined) {
           player.isMutedByAdmin = payload.isMutedByAdmin;
           player.isMuted = payload.isMutedByAdmin;
@@ -361,6 +398,63 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponse & { socket: { serve
 
         updateSpectatorCount(roomState);
         io.to(currentRoomId).emit("room_state_update", roomState);
+      });
+
+      // Kick User (Player or Spectator)
+      socket.on("admin_kick_user", (payload: { targetUsername: string }) => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+        const target = payload.targetUsername;
+
+        if (roomState.players[target]) {
+          delete roomState.players[target];
+          updateSpectatorCount(roomState);
+
+          roomState.chatMessages.push({
+            id: `sys-kick-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: `👢 @${target} was kicked from the lobby by admin.`,
+            timestamp: Date.now(),
+            isSystem: true
+          });
+
+          io.to(currentRoomId).emit("user_kicked_event", { targetUsername: target });
+          io.to(currentRoomId).emit("room_state_update", roomState);
+        }
+      });
+
+      // Ban User (Player or Spectator)
+      socket.on("admin_ban_user", (payload: { targetUsername: string }) => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+        const target = payload.targetUsername;
+
+        if (!roomState.bannedUsernames) roomState.bannedUsernames = [];
+        if (!roomState.bannedUsernames.includes(target)) {
+          roomState.bannedUsernames.push(target);
+        }
+
+        if (roomState.players[target]) {
+          delete roomState.players[target];
+          updateSpectatorCount(roomState);
+
+          roomState.chatMessages.push({
+            id: `sys-ban-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: `⛔ @${target} was banned from the lobby by admin.`,
+            timestamp: Date.now(),
+            isSystem: true
+          });
+
+          io.to(currentRoomId).emit("user_banned_event", { targetUsername: target });
+          io.to(currentRoomId).emit("room_state_update", roomState);
+        }
       });
 
       socket.on("disconnect", () => {

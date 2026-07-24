@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { MatchRoomState, TeamId, PlayerRole, Player } from '../types';
-import { Shield, X, Users, Clock, AlertTriangle, Plus, Trash2, VolumeX, VideoOff, Check, RotateCcw } from 'lucide-react';
+import { MatchRoomState, TeamId, Player } from '../types';
+import { Shield, X, Users, Clock, Plus, VolumeX, VideoOff, Check, UserX, Ban, Eye, UserCheck } from 'lucide-react';
 
 interface AdminPanelModalProps {
   roomState: MatchRoomState;
   onClose: () => void;
   onControlTimer: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
-  onAdminUpdatePlayer: (targetUsername: string, updates: any) => void;
+  onAdminUpdatePlayer: (targetUsername: string, updates: Partial<Player>) => void;
   onAdminUpdateRoster: (roster: { username: string; team: TeamId; personalizedTime?: number }[]) => void;
+  onAdminKickUser: (targetUsername: string) => void;
+  onAdminBanUser: (targetUsername: string) => void;
 }
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
@@ -15,9 +17,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onClose,
   onControlTimer,
   onAdminUpdatePlayer,
-  onAdminUpdateRoster
+  onAdminUpdateRoster,
+  onAdminKickUser,
+  onAdminBanUser
 }) => {
-  const { timer, players, registeredRoster } = roomState;
+  const { timer, players, registeredRoster, isPersonalLobby } = roomState;
 
   // Time limit controls state
   const [team1TimeInput, setTeam1TimeInput] = useState(roomState.team1TotalTime / 60);
@@ -28,6 +32,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [addNameInput, setAddNameInput] = useState('');
   const [addTeamInput, setAddTeamInput] = useState<TeamId>('team1');
   const [addTimeInput, setAddTimeInput] = useState(180);
+
+  const activePlayers = (Object.values(players) as Player[]).filter(p => p.role === 'player');
+  const activeSpectators = (Object.values(players) as Player[]).filter(p => p.role === 'spectator');
 
   const handleApplyGlobalTimeSettings = () => {
     onControlTimer('reset', {
@@ -60,7 +67,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-purple-800/60 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 text-slate-100 space-y-6 relative">
+      <div className="bg-slate-900 border border-purple-800/60 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 text-slate-100 space-y-6 relative">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -68,8 +75,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Admin Match Control Suite</h2>
-              <p className="text-xs text-slate-400">Mid-session player edits, side times, turn limits & force controls</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-white">Admin Match Control Suite</h2>
+                {isPersonalLobby && (
+                  <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded font-mono">
+                    Personal Lobby Mode
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">Mid-session player & spectator management, kicks, bans & timer controls</p>
             </div>
           </div>
           <button
@@ -80,7 +94,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           </button>
         </div>
 
-        {/* SECTION 1: SIDE TOTAL TIME & FINISH WARNING CONTROLS */}
+        {/* SECTION 1: GLOBAL SIDE TIMERS & FINISH WARNING */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
             <Clock className="w-4 h-4" /> Global Side Timers & Warning Control
@@ -124,10 +138,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           </button>
         </div>
 
-        {/* SECTION 2: MID-SESSION PLAYER EDIT & TIME PERSONALIZATION */}
+        {/* SECTION 2: ACTIVE PLAYER MANAGEMENT & MID-SESSION EDIT */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
-            <Users className="w-4 h-4" /> Mid-Session Player Roster & Personal Limits
+          <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> Active Player Roster ({activePlayers.length})</span>
+            <span className="text-[10px] text-slate-500">Edit side, turn limit, mute, kick & ban</span>
           </h3>
 
           {/* Quick Add Mid-Session */}
@@ -162,66 +177,150 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </button>
           </div>
 
-          {/* Active Connected Players List */}
-          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-            {(Object.values(players) as Player[]).map((player) => (
-              <div
-                key={player.username}
-                className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${
-                    player.team === 'team1' ? 'bg-blue-500' : player.team === 'team2' ? 'bg-red-500' : 'bg-amber-500'
-                  }`}></span>
-                  <span className="font-bold text-white font-mono">@{player.username}</span>
-                  <span className="text-[10px] uppercase font-mono text-slate-400">({player.role})</span>
+          {/* Connected Players List */}
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {activePlayers.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-2 text-center">No active players connected.</p>
+            ) : (
+              activePlayers.map((player) => (
+                <div
+                  key={player.username}
+                  className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${
+                      player.team === 'team1' ? 'bg-blue-500' : 'bg-red-500'
+                    }`}></span>
+                    <span className="font-bold text-white font-mono">@{player.username}</span>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex items-center gap-2">
+                    {/* Team Reassignment */}
+                    <select
+                      value={player.team || 'team1'}
+                      onChange={(e) => onAdminUpdatePlayer(player.username, { team: e.target.value as TeamId })}
+                      className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-white"
+                    >
+                      <option value="team1">Team 1</option>
+                      <option value="team2">Team 2</option>
+                    </select>
+
+                    {/* Turn Time (s) */}
+                    <input
+                      type="number"
+                      value={player.timeLimitSeconds}
+                      onChange={(e) => onAdminUpdatePlayer(player.username, { timeLimitSeconds: Number(e.target.value), remainingSeconds: Number(e.target.value) })}
+                      className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-white font-mono"
+                      title="Personalized Turn Time (s)"
+                    />
+
+                    {/* Force Mute */}
+                    <button
+                      onClick={() => onAdminUpdatePlayer(player.username, { isMutedByAdmin: !player.isMutedByAdmin })}
+                      className={`p-1.5 rounded transition ${
+                        player.isMutedByAdmin ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                      title="Force Admin Mute"
+                    >
+                      <VolumeX className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Force Video Off */}
+                    <button
+                      onClick={() => onAdminUpdatePlayer(player.username, { isVideoOffByAdmin: !player.isVideoOffByAdmin })}
+                      className={`p-1.5 rounded transition ${
+                        player.isVideoOffByAdmin ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                      title="Force Video Off"
+                    >
+                      <VideoOff className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Kick Player */}
+                    <button
+                      onClick={() => onAdminKickUser(player.username)}
+                      className="p-1.5 bg-slate-800 hover:bg-red-900 text-slate-300 hover:text-red-200 rounded transition"
+                      title="Kick Player from Lobby"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Ban Player */}
+                    <button
+                      onClick={() => onAdminBanUser(player.username)}
+                      className="p-1.5 bg-red-950 hover:bg-red-900 text-red-400 hover:text-red-100 rounded border border-red-800 transition"
+                      title="Ban Player from Lobby"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
+              ))
+            )}
+          </div>
+        </div>
 
-                {/* Controls */}
-                <div className="flex items-center gap-2">
-                  {/* Team Reassignment */}
-                  <select
-                    value={player.team || 'team1'}
-                    onChange={(e) => onAdminUpdatePlayer(player.username, { team: e.target.value as TeamId })}
-                    className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-white"
-                  >
-                    <option value="team1">Team 1</option>
-                    <option value="team2">Team 2</option>
-                  </select>
+        {/* SECTION 3: SPECTATORS LIST & ADMIN SPECTATOR CONTROLS */}
+        <div className="bg-slate-950 p-4 rounded-xl border border-amber-900/40 space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><Eye className="w-4 h-4" /> Connected Spectator Roster ({activeSpectators.length})</span>
+            <span className="text-[10px] text-slate-500">No cam/mic permissions &bull; Promote, Kick or Ban</span>
+          </h3>
 
-                  {/* Personal Turn Duration */}
-                  <input
-                    type="number"
-                    value={player.timeLimitSeconds}
-                    onChange={(e) => onAdminUpdatePlayer(player.username, { timeLimitSeconds: Number(e.target.value), remainingSeconds: Number(e.target.value) })}
-                    className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-white font-mono"
-                    title="Personalized Turn Time (s)"
-                  />
+          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+            {activeSpectators.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-2 text-center">No spectators currently in the lounge.</p>
+            ) : (
+              activeSpectators.map((spectator) => (
+                <div
+                  key={spectator.username}
+                  className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span className="font-bold text-white font-mono">@{spectator.username}</span>
+                    <span className="text-[10px] text-slate-500">(Spectator)</span>
+                  </div>
 
-                  {/* Force Mute */}
-                  <button
-                    onClick={() => onAdminUpdatePlayer(player.username, { isMutedByAdmin: !player.isMutedByAdmin })}
-                    className={`p-1.5 rounded transition ${
-                      player.isMutedByAdmin ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                    title="Force Admin Mute"
-                  >
-                    <VolumeX className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Promote to Team 1 */}
+                    <button
+                      onClick={() => onAdminUpdatePlayer(spectator.username, { role: 'player', team: 'team1' })}
+                      className="px-2 py-1 bg-blue-900/80 hover:bg-blue-800 text-blue-200 text-[11px] font-bold rounded border border-blue-700"
+                    >
+                      + Team 1
+                    </button>
 
-                  {/* Force Video Off */}
-                  <button
-                    onClick={() => onAdminUpdatePlayer(player.username, { isVideoOffByAdmin: !player.isVideoOffByAdmin })}
-                    className={`p-1.5 rounded transition ${
-                      player.isVideoOffByAdmin ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                    title="Force Video Off"
-                  >
-                    <VideoOff className="w-3.5 h-3.5" />
-                  </button>
+                    {/* Promote to Team 2 */}
+                    <button
+                      onClick={() => onAdminUpdatePlayer(spectator.username, { role: 'player', team: 'team2' })}
+                      className="px-2 py-1 bg-red-900/80 hover:bg-red-800 text-red-200 text-[11px] font-bold rounded border border-red-700"
+                    >
+                      + Team 2
+                    </button>
+
+                    {/* Kick Spectator */}
+                    <button
+                      onClick={() => onAdminKickUser(spectator.username)}
+                      className="p-1.5 bg-slate-800 hover:bg-red-900 text-slate-300 hover:text-red-200 rounded transition"
+                      title="Kick Spectator"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Ban Spectator */}
+                    <button
+                      onClick={() => onAdminBanUser(spectator.username)}
+                      className="p-1.5 bg-red-950 hover:bg-red-900 text-red-400 hover:text-red-100 rounded border border-red-800 transition"
+                      title="Ban Spectator"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { MatchRoomState, Player } from '../types';
-import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock, UserX, Ban } from 'lucide-react';
 
 interface PlayerRosterGridProps {
   roomState: MatchRoomState;
   currentUser: Player | null;
   onToggleMedia: (mediaType: 'mic' | 'video', value: boolean) => void;
   onAdminUpdatePlayer?: (targetUsername: string, updates: Partial<Player>) => void;
+  onAdminKickUser?: (targetUsername: string) => void;
+  onAdminBanUser?: (targetUsername: string) => void;
 }
 
 // Sub-component for rendering individual player webcam video preview
@@ -51,7 +53,9 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
   roomState,
   currentUser,
   onToggleMedia,
-  onAdminUpdatePlayer
+  onAdminUpdatePlayer,
+  onAdminKickUser,
+  onAdminBanUser
 }) => {
   const { players, timer } = roomState;
 
@@ -148,9 +152,9 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
             </div>
           </div>
 
-          {/* Media Toggles */}
+          {/* Media Toggles & Admin Action Buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Mic Toggle Button */}
+            {/* Mic Toggle Button (Players only) */}
             {isSelf ? (
               <button
                 onClick={() => onToggleMedia('mic', !player.isMuted)}
@@ -172,7 +176,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
               </div>
             )}
 
-            {/* Camera Toggle Button */}
+            {/* Camera Toggle Button (Players only) */}
             {isSelf ? (
               <button
                 onClick={() => onToggleMedia('video', !player.isVideoOff)}
@@ -194,17 +198,31 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
               </div>
             )}
 
-            {/* Admin Mute Toggle */}
-            {currentUser?.role === 'admin' && onAdminUpdatePlayer && (
-              <button
-                onClick={() => onAdminUpdatePlayer(player.username, { isMutedByAdmin: !player.isMutedByAdmin })}
-                className={`p-1.5 rounded-lg transition ${
-                  player.isMutedByAdmin ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-                title="Admin Force Mute Toggle"
-              >
-                <Shield className="w-3.5 h-3.5" />
-              </button>
+            {/* Admin Controls */}
+            {currentUser?.role === 'admin' && (
+              <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-800">
+                {onAdminUpdatePlayer && (
+                  <button
+                    onClick={() => onAdminUpdatePlayer(player.username, { isMutedByAdmin: !player.isMutedByAdmin })}
+                    className={`p-1.5 rounded-lg transition ${
+                      player.isMutedByAdmin ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                    title="Admin Mute Toggle"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                {onAdminKickUser && (
+                  <button
+                    onClick={() => onAdminKickUser(player.username)}
+                    className="p-1.5 bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 rounded-lg transition"
+                    title="Kick Player"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -222,7 +240,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
             <h3 className="font-bold text-sm text-blue-300 uppercase tracking-wider">
               Team 1 (Blue)
             </h3>
-            <span className="bg-blue-950 text-blue-400 text-xs px-2 py-0.5 rounded-full border border-blue-800/60 font-mono">
+            <span className="bg-blue-950 text-blue-400 text-xs px-2 py-0.5 rounded-full border border-blue-800/60 font-mono font-bold">
               {team1Players.length}
             </span>
           </div>
@@ -249,7 +267,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
             <h3 className="font-bold text-sm text-red-300 uppercase tracking-wider">
               Team 2 (Red)
             </h3>
-            <span className="bg-red-950 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-800/60 font-mono">
+            <span className="bg-red-950 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-800/60 font-mono font-bold">
               {team2Players.length}
             </span>
           </div>

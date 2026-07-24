@@ -8,33 +8,40 @@ if (!global.activeRooms) {
   global.activeRooms = {};
 }
 
-export function createDefaultRoomState(roomId = "main-lobby", roomTitle = "Grand Championship Match & Debate Lobby", adminUsername = "admin"): MatchRoomState {
+export function createDefaultRoomState(
+  roomId = "main-lobby",
+  roomTitle = "Grand Championship Match & Debate Lobby",
+  adminUsername = "admin"
+): MatchRoomState {
+  const isPersonalLobby = roomId !== "main-lobby";
+
   return {
     roomId,
-    roomTitle,
+    roomTitle: isPersonalLobby ? `Personal Match Lobby #${roomId}` : roomTitle,
     adminUsername,
+    isPersonalLobby,
     players: {},
+    bannedUsernames: [],
     registeredRoster: [
       { username: "alex_blue", team: "team1", personalizedTime: 180 },
       { username: "jordan_blue", team: "team1", personalizedTime: 180 },
       { username: "sarah_red", team: "team2", personalizedTime: 180 },
       { username: "sam_red", team: "team2", personalizedTime: 180 }
     ],
-    notesPages: [
-      {
-        pageNumber: 1,
-        title: "Page 1: Match Rules & Strategy",
-        content: "# Match Strategy & Key Rules\n\n- Team 1 (Blue) vs Team 2 (Red)\n- Active turn time: 30s - 180s per speaker\n- Admin warning threshold set at 10s\n- Auto-mute triggers upon timeout!",
+    teamNotes: {
+      team1: {
+        teamId: "team1",
+        title: "Team 1 Secret Strategy Pad",
+        content: "# Team 1 Confidential Strategy & Debate Notes\n\n- Key Arguments:\n  1. Main thesis statement\n  2. Rebuttal points for Team 2\n  3. Closing synthesis\n\n*(Private to Team 1 players. Hidden from Admin and Spectators)*",
         updatedAt: Date.now()
       },
-      {
-        pageNumber: 2,
-        title: "Page 2: Team Notes & Arguments",
-        content: "# Team Scratchpad\n\n- Key points for opening statement:\n  1. Main thesis\n  2. Supporting evidence\n  3. Rebuttal notes",
+      team2: {
+        teamId: "team2",
+        title: "Team 2 Secret Strategy Pad",
+        content: "# Team 2 Confidential Strategy & Debate Notes\n\n- Key Arguments:\n  1. Counter-arguments & evidence\n  2. Key questions for Team 1\n  3. Summary points\n\n*(Private to Team 2 players. Hidden from Admin and Spectators)*",
         updatedAt: Date.now()
       }
-    ],
-    activePageIndex: 0,
+    },
     chatMessages: [
       {
         id: "msg-1",
@@ -42,7 +49,7 @@ export function createDefaultRoomState(roomId = "main-lobby", roomTitle = "Grand
         senderName: "System",
         senderRole: "admin",
         channel: "global",
-        text: "👋 Welcome to MatchLobby Next.js! Connect as Admin Host, Player, or Spectator.",
+        text: "👋 Welcome to MatchLobby! Connect as Admin Host, Player, or Spectator.",
         timestamp: Date.now(),
         isSystem: true
       }

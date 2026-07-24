@@ -7,11 +7,12 @@ import { LoginStep } from '@/components/LoginStep';
 import { ModeSelectionStep } from '@/components/ModeSelectionStep';
 import { LobbyHeader } from '@/components/LobbyHeader';
 import { PlayerRosterGrid } from '@/components/PlayerRosterGrid';
+import { SpectatorLounge } from '@/components/SpectatorLounge';
 import { ActiveSpeakerStage } from '@/components/ActiveSpeakerStage';
 import { SharedNotesPad } from '@/components/SharedNotesPad';
 import { ChatPanel } from '@/components/ChatPanel';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
-import { Video, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
+import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -29,8 +30,8 @@ export default function Home() {
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
-  // View navigation tab in match lobby: 'stage' | 'notes' | 'chat' | 'all'
-  const [activeViewTab, setActiveViewTab] = useState<'stage' | 'notes' | 'chat' | 'all'>('stage');
+  // View navigation tab in match lobby: 'stage' | 'spectators' | 'notes' | 'chat' | 'all'
+  const [activeViewTab, setActiveViewTab] = useState<'stage' | 'spectators' | 'notes' | 'chat' | 'all'>('stage');
 
   // Check active session on mount
   useEffect(() => {
@@ -56,7 +57,6 @@ export default function Home() {
     let socketInstance: Socket | null = null;
 
     const initSocket = async () => {
-      // Ensure Next.js API socket server is initialized
       await fetch('/api/socket/io');
 
       socketInstance = io({
@@ -82,6 +82,31 @@ export default function Home() {
         }
       });
 
+      socketInstance.on('user_kicked_event', (data: { targetUsername: string }) => {
+        if (currentUser && currentUser.username === data.targetUsername) {
+          alert('You have been kicked from the lobby by the admin.');
+          setCurrentUser(null);
+          setRoomState(null);
+          setAppStep('mode_select');
+        }
+      });
+
+      socketInstance.on('user_banned_event', (data: { targetUsername: string }) => {
+        if (currentUser && currentUser.username === data.targetUsername) {
+          alert('You have been banned from this lobby by the admin.');
+          setCurrentUser(null);
+          setRoomState(null);
+          setAppStep('mode_select');
+        }
+      });
+
+      socketInstance.on('banned_error', (data: { message: string }) => {
+        alert(data.message);
+        setCurrentUser(null);
+        setRoomState(null);
+        setAppStep('mode_select');
+      });
+
       socketInstance.on('chat_error', (data: { message: string }) => {
         alert(data.message);
       });
@@ -96,7 +121,7 @@ export default function Home() {
         socketInstance.disconnect();
       }
     };
-  }, []);
+  }, [currentUser?.username]);
 
   // Step 1 Complete: User Login
   const handleLoginSuccess = (user: { username: string; authProvider: string; avatarUrl: string }) => {
@@ -147,6 +172,9 @@ export default function Home() {
   };
 
   const handleLeaveRoom = () => {
+    if (socket) {
+      socket.emit('leave_room');
+    }
     setCurrentUser(null);
     setRoomState(null);
     setAppStep('mode_select');
@@ -170,24 +198,14 @@ export default function Home() {
     });
   };
 
-  const handleUpdateNotePage = (pageIndex: number, title?: string, content?: string) => {
+  const handleUpdateTeamNotes = (teamId: TeamId, title?: string, content?: string) => {
     if (!socket || !currentUser) return;
-    socket.emit('update_note_page', {
-      pageIndex,
+    socket.emit('update_team_notes', {
+      teamId,
       title,
       content,
       username: currentUser.username
     });
-  };
-
-  const handleAddNotePage = () => {
-    if (!socket || !currentUser) return;
-    socket.emit('add_note_page', { username: currentUser.username });
-  };
-
-  const handleSetActiveNotePage = (pageIndex: number) => {
-    if (!socket) return;
-    socket.emit('set_active_note_page', pageIndex);
   };
 
   const handleControlTimer = (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => {
@@ -198,6 +216,26 @@ export default function Home() {
   const handleAdminUpdatePlayer = (targetUsername: string, updates: Partial<Player>) => {
     if (!socket) return;
     socket.emit('admin_update_player', { targetUsername, ...updates });
+  };
+
+  const handleAdminUpdateRoster = (roster: { username: string; team: TeamId; personalizedTime?: number }[]) => {
+    if (!socket) return;
+    socket.emit('admin_update_roster', { roster });
+  };
+
+  const handleAdminKickUser = (targetUsername: string) => {
+    if (!socket) return;
+    socket.emit('admin_kick_user', { targetUsername });
+  };
+
+  const handleAdminBanUser = (targetUsername: string) => {
+    if (!socket) return;
+    socket.emit('admin_ban_user', { targetUsername });
+  };
+
+  const handleAdminPromoteSpectator = (targetUsername: string, team: TeamId) => {
+    if (!socket) return;
+    socket.emit('admin_update_player', { targetUsername, role: 'player', team });
   };
 
   // STEP 1: LOGIN PAGE
@@ -230,7 +268,7 @@ export default function Home() {
         />
       )}
 
-      {/* Simplified Navigation View Switcher Bar */}
+      {/* Navigation View Switcher Bar */}
       {roomState && (
         <div className="bg-slate-900/80 border-b border-slate-800 backdrop-blur-md sticky top-[65px] z-20">
           <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto">
@@ -244,7 +282,19 @@ export default function Home() {
                 }`}
               >
                 <Video className="w-4 h-4" />
-                <span>Stage & Video Grid</span>
+                <span>Stage & Video</span>
+              </button>
+
+              <button
+                onClick={() => setActiveViewTab('spectators')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeViewTab === 'spectators'
+                    ? 'bg-amber-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Eye className="w-4 h-4" />
+                <span>Spectator Lounge ({roomState.spectatorCount})</span>
               </button>
 
               <button
@@ -256,7 +306,7 @@ export default function Home() {
                 }`}
               >
                 <FileText className="w-4 h-4" />
-                <span>Shared Notes</span>
+                <span>Secret Team Notes</span>
               </button>
 
               <button
@@ -285,7 +335,11 @@ export default function Home() {
             </div>
 
             <div className="text-xs text-slate-400 font-medium hidden md:block">
-              Click <span className="text-blue-400 font-semibold">Video</span> button in roster to turn webcam feed ON/OFF
+              {currentUser?.role === 'spectator' ? (
+                <span className="text-amber-400">Spectator Mode: View live stage & global chat</span>
+              ) : (
+                <span>Click <span className="text-blue-400 font-semibold">Video</span> button in roster to turn webcam feed ON/OFF</span>
+              )}
             </div>
           </div>
         </div>
@@ -294,7 +348,7 @@ export default function Home() {
       {/* Main Workspace View Body */}
       {roomState && (
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-          {/* VIEW 1: STAGE & VIDEO GRID (DEFAULT) */}
+          {/* VIEW 1: STAGE & VIDEO GRID */}
           {activeViewTab === 'stage' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-7 space-y-6">
@@ -311,25 +365,39 @@ export default function Home() {
                   currentUser={currentUser}
                   onToggleMedia={handleToggleMedia}
                   onAdminUpdatePlayer={handleAdminUpdatePlayer}
+                  onAdminKickUser={handleAdminKickUser}
+                  onAdminBanUser={handleAdminBanUser}
                 />
               </div>
             </div>
           )}
 
-          {/* VIEW 2: SHARED NOTES */}
+          {/* VIEW 2: SPECTATOR LOUNGE */}
+          {activeViewTab === 'spectators' && (
+            <div className="max-w-4xl mx-auto">
+              <SpectatorLounge
+                roomState={roomState}
+                currentUser={currentUser}
+                onLeaveRoom={handleLeaveRoom}
+                onAdminKickUser={handleAdminKickUser}
+                onAdminBanUser={handleAdminBanUser}
+                onAdminPromoteSpectator={handleAdminPromoteSpectator}
+              />
+            </div>
+          )}
+
+          {/* VIEW 3: SECRET TEAM NOTES */}
           {activeViewTab === 'notes' && (
             <div className="max-w-4xl mx-auto">
               <SharedNotesPad
                 roomState={roomState}
                 currentUser={currentUser}
-                onUpdateNotePage={handleUpdateNotePage}
-                onAddNotePage={handleAddNotePage}
-                onSetActivePage={handleSetActiveNotePage}
+                onUpdateTeamNotes={handleUpdateTeamNotes}
               />
             </div>
           )}
 
-          {/* VIEW 3: MATCH CHAT */}
+          {/* VIEW 4: MATCH CHAT */}
           {activeViewTab === 'chat' && (
             <div className="max-w-2xl mx-auto">
               <ChatPanel
@@ -340,7 +408,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* VIEW 4: ALL-IN-ONE DASHBOARD */}
+          {/* VIEW 5: ALL-IN-ONE DASHBOARD */}
           {activeViewTab === 'all' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-4 space-y-6">
@@ -349,6 +417,8 @@ export default function Home() {
                   currentUser={currentUser}
                   onToggleMedia={handleToggleMedia}
                   onAdminUpdatePlayer={handleAdminUpdatePlayer}
+                  onAdminKickUser={handleAdminKickUser}
+                  onAdminBanUser={handleAdminBanUser}
                 />
               </div>
 
@@ -362,13 +432,11 @@ export default function Home() {
                 <SharedNotesPad
                   roomState={roomState}
                   currentUser={currentUser}
-                  onUpdateNotePage={handleUpdateNotePage}
-                  onAddNotePage={handleAddNotePage}
-                  onSetActivePage={handleSetActiveNotePage}
+                  onUpdateTeamNotes={handleUpdateTeamNotes}
                 />
               </div>
 
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-3 space-y-6">
                 <ChatPanel
                   roomState={roomState}
                   currentUser={currentUser}
@@ -387,6 +455,9 @@ export default function Home() {
           onClose={() => setIsAdminPanelOpen(false)}
           onControlTimer={handleControlTimer}
           onAdminUpdatePlayer={handleAdminUpdatePlayer}
+          onAdminUpdateRoster={handleAdminUpdateRoster}
+          onAdminKickUser={handleAdminKickUser}
+          onAdminBanUser={handleAdminBanUser}
         />
       )}
     </div>

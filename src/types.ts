@@ -16,10 +16,11 @@ export interface Player {
   timeLimitSeconds: number; // custom time personalized for player turn
   remainingSeconds: number; // current turn remaining time
   authProvider?: 'google' | 'discord' | 'direct';
+  joinedAt?: number;
 }
 
 export interface SharedNotePage {
-  pageNumber: number;
+  teamId: TeamId; // 'team1' or 'team2'
   title: string;
   content: string;
   lastEditedBy?: string;
@@ -54,14 +55,18 @@ export interface MatchRoomState {
   roomId: string;
   roomTitle: string;
   adminUsername: string;
+  isPersonalLobby: boolean;
   players: Record<string, Player>; // username -> Player
   registeredRoster: {
     username: string;
     team: TeamId;
     personalizedTime?: number;
   }[];
-  notesPages: SharedNotePage[];
-  activePageIndex: number;
+  teamNotes: {
+    team1: SharedNotePage;
+    team2: SharedNotePage;
+  };
+  bannedUsernames: string[];
   chatMessages: ChatMessage[];
   timer: TimerState;
   spectatorCount: number;
