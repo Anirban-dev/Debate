@@ -527,6 +527,31 @@ const ioHandler = (
         }
       });
 
+      // Unban User (Player or Spectator)
+      socket.on("admin_unban_user", (payload: { targetUsername: string }) => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+        const target = payload.targetUsername;
+
+        if (roomState.bannedUsernames && roomState.bannedUsernames.includes(target)) {
+          roomState.bannedUsernames = roomState.bannedUsernames.filter(u => u !== target);
+
+          roomState.chatMessages.push({
+            id: `sys-unban-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: `✅ @${target} was unbanned by admin and can now re-enter the lobby.`,
+            timestamp: Date.now(),
+            isSystem: true
+          });
+
+          io.to(currentRoomId).emit("player_toast_event", { message: `✅ @${target} was unbanned by admin.` });
+          io.to(currentRoomId).emit("room_state_update", roomState);
+        }
+      });
+
       // Update team total time (Admin or Team click)
       socket.on("update_team_time", (payload: { team: TeamId; newTimeSeconds: number }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;

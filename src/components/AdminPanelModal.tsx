@@ -10,6 +10,7 @@ interface AdminPanelModalProps {
   onAdminUpdateRoster: (roster: { username: string; team: TeamId; personalizedTime?: number }[]) => void;
   onAdminKickUser: (targetUsername: string) => void;
   onAdminBanUser: (targetUsername: string) => void;
+  onAdminUnbanUser?: (targetUsername: string) => void;
   onAdminEndSession: () => void;
 }
 
@@ -21,6 +22,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onAdminUpdateRoster,
   onAdminKickUser,
   onAdminBanUser,
+  onAdminUnbanUser,
   onAdminEndSession
 }) => {
   const { timer, players, registeredRoster, isPersonalLobby } = roomState;
@@ -325,7 +327,46 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           </div>
         </div>
 
-        {/* SECTION 4: DESTRUCTIVE / SESSION TERMINATION */}
+        {/* SECTION 4: BANNED USERS LIST & UNBAN CONTROL */}
+        <div className="bg-slate-950 p-4 rounded-xl border border-red-900/40 space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-red-400 flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><Ban className="w-4 h-4 text-red-500" /> Banned Users Blacklist ({roomState.bannedUsernames?.length || 0})</span>
+            <span className="text-[10px] text-slate-500">Blocked from re-entering lobby &bull; Admin can unban</span>
+          </h3>
+
+          <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+            {(!roomState.bannedUsernames || roomState.bannedUsernames.length === 0) ? (
+              <p className="text-xs text-slate-500 italic py-2 text-center">No users currently banned from this lobby.</p>
+            ) : (
+              roomState.bannedUsernames.map((bannedUser) => (
+                <div
+                  key={bannedUser}
+                  className="bg-slate-900 p-2.5 rounded-xl border border-red-900/30 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span className="font-bold text-white font-mono">@{bannedUser}</span>
+                    <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-1.5 py-0.2 rounded font-mono">
+                      Banned
+                    </span>
+                  </div>
+
+                  {onAdminUnbanUser && (
+                    <button
+                      onClick={() => onAdminUnbanUser(bannedUser)}
+                      className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 rounded text-[11px] font-bold transition flex items-center gap-1"
+                      title="Lift Ban and Allow Re-entry"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" /> Unban User
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 5: DESTRUCTIVE / SESSION TERMINATION */}
         <div className="bg-red-950/40 p-4 rounded-xl border border-red-900/60 flex items-center justify-between gap-4">
           <div>
             <h4 className="text-sm font-bold text-red-300 flex items-center gap-1.5">

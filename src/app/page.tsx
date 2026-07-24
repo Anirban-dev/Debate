@@ -313,6 +313,11 @@ export default function Home() {
     socket.emit('admin_ban_user', { targetUsername });
   };
 
+  const handleAdminUnbanUser = (targetUsername: string) => {
+    if (!socket) return;
+    socket.emit('admin_unban_user', { targetUsername });
+  };
+
   const handleAdminEndSession = () => {
     if (!socket) return;
     socket.emit('admin_end_session');
@@ -562,6 +567,7 @@ export default function Home() {
           onAdminUpdateRoster={handleAdminUpdateRoster}
           onAdminKickUser={handleAdminKickUser}
           onAdminBanUser={handleAdminBanUser}
+          onAdminUnbanUser={handleAdminUnbanUser}
           onAdminEndSession={handleAdminEndSession}
         />
       )}
