@@ -66,8 +66,4 @@ export function createDefaultRoomState(
   };
 }
 
-if (!global.activeRooms["main-lobby"]) {
-  global.activeRooms["main-lobby"] = createDefaultRoomState();
-}
-
 export const activeRooms = global.activeRooms;

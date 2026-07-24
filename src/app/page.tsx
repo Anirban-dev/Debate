@@ -12,6 +12,8 @@ import { ActiveSpeakerStage } from '@/components/ActiveSpeakerStage';
 import { SharedNotesPad } from '@/components/SharedNotesPad';
 import { ChatPanel } from '@/components/ChatPanel';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
+import { RoastNotification, ToastItem } from '@/components/RoastNotification';
+import { PopupModal, ModalData } from '@/components/PopupModal';
 import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
 export default function Home() {
@@ -26,7 +28,7 @@ export default function Home() {
   // Active room state and player role object
   const [roomState, setRoomState] = useState<MatchRoomState | null>(null);
   const [currentUser, setCurrentUser] = useState<Player | null>(null);
-  const [currentRoomId, setCurrentRoomId] = useState<string>('main-lobby');
+  const [currentRoomId, setCurrentRoomId] = useState<string>('');
 
   const currentUserRef = React.useRef<Player | null>(null);
   useEffect(() => {
@@ -35,12 +37,30 @@ export default function Home() {
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
-  // Floating toasts for real-time player join/leave events
-  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+  // Modular Modal/Popup State
+  const [modalData, setModalData] = useState<ModalData | null>(null);
 
-  const addToast = (message: string) => {
+  const showModal = (
+    title: string,
+    message: string,
+    type: 'error' | 'warning' | 'info' | 'success' = 'info',
+    onConfirm?: () => void
+  ) => {
+    setModalData({
+      isOpen: true,
+      title,
+      message,
+      type,
+      onConfirm
+    });
+  };
+
+  // Floating toasts/roasts
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = (message: string, type?: 'roast' | 'info' | 'success' | 'warning') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4500);
@@ -92,6 +112,14 @@ export default function Home() {
         setAppStep('in_game');
       });
 
+      socketInstance.on('room_not_found_error', (data: { message: string }) => {
+        showModal('Lobby Not Found', data.message || 'The requested lobby does not exist.', 'error');
+        setCurrentUser(null);
+        currentUserRef.current = null;
+        setRoomState(null);
+        setAppStep('mode_select');
+      });
+
       socketInstance.on('room_state_update', (updatedState: MatchRoomState) => {
         setRoomState(updatedState);
         const me = currentUserRef.current;
@@ -105,7 +133,7 @@ export default function Home() {
       socketInstance.on('user_kicked_event', (data: { targetUsername: string }) => {
         const me = currentUserRef.current;
         if (me && me.username === data.targetUsername) {
-          alert('You have been kicked from the lobby by the admin.');
+          showModal('Kicked from Lobby', 'You have been kicked from the lobby by the admin.', 'warning');
           setCurrentUser(null);
           currentUserRef.current = null;
           setRoomState(null);
@@ -116,7 +144,7 @@ export default function Home() {
       socketInstance.on('user_banned_event', (data: { targetUsername: string }) => {
         const me = currentUserRef.current;
         if (me && me.username === data.targetUsername) {
-          alert('You have been banned from this lobby by the admin.');
+          showModal('Banned from Lobby', 'You have been banned from this lobby by the admin.', 'error');
           setCurrentUser(null);
           currentUserRef.current = null;
           setRoomState(null);
@@ -125,7 +153,7 @@ export default function Home() {
       });
 
       socketInstance.on('banned_error', (data: { message: string }) => {
-        alert(data.message);
+        showModal('Access Denied', data.message, 'error');
         setCurrentUser(null);
         currentUserRef.current = null;
         setRoomState(null);
@@ -133,7 +161,7 @@ export default function Home() {
       });
 
       socketInstance.on('session_ended_event', (data: { message: string }) => {
-        alert(data.message || 'The match session has been ended and the lobby destroyed.');
+        showModal('Session Ended', data.message || 'The match session has been ended and the lobby destroyed.', 'warning');
         setCurrentUser(null);
         currentUserRef.current = null;
         setRoomState(null);
@@ -143,24 +171,24 @@ export default function Home() {
 
       socketInstance.on('player_toast_event', (data: { message: string }) => {
         if (data?.message) {
-          addToast(data.message);
+          addToast(data.message, 'info');
         }
       });
 
       socketInstance.on('team_time_prompt_event', (data: { team: TeamId; message: string }) => {
         if (data?.message) {
-          addToast(data.message);
+          addToast(data.message, 'roast');
         }
       });
 
       socketInstance.on('time_update_error', (data: { message: string }) => {
         if (data?.message) {
-          addToast(`⚠️ ${data.message}`);
+          addToast(`⚠️ ${data.message}`, 'warning');
         }
       });
 
       socketInstance.on('chat_error', (data: { message: string }) => {
-        alert(data.message);
+        showModal('Notice', data.message, 'warning');
       });
 
       setSocket(socketInstance);
@@ -440,6 +468,7 @@ export default function Home() {
                   onAdminBanUser={handleAdminBanUser}
                   onUpdateTeamTime={handleUpdateTeamTime}
                   onUpdatePlayerTime={handleUpdatePlayerTime}
+                  onShowNotice={(title, msg) => showModal(title, msg, 'warning')}
                 />
               </div>
             </div>
@@ -492,6 +521,7 @@ export default function Home() {
                   onAdminUpdatePlayer={handleAdminUpdatePlayer}
                   onAdminKickUser={handleAdminKickUser}
                   onAdminBanUser={handleAdminBanUser}
+                  onShowNotice={(title, msg) => showModal(title, msg, 'warning')}
                 />
               </div>
 
@@ -535,26 +565,17 @@ export default function Home() {
         />
       )}
 
-      {/* Floating Real-time Player Join/Leave Toasts */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="pointer-events-auto bg-slate-900/95 text-slate-100 border border-blue-500/50 shadow-2xl shadow-blue-950/80 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between gap-3 backdrop-blur-md transition-all transform duration-300"
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping shrink-0" />
-              <span>{toast.message}</span>
-            </div>
-            <button
-              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              className="text-slate-400 hover:text-white text-xs font-extrabold px-1"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
+      {/* Modular Real-time Roast & Toast Notifications */}
+      <RoastNotification
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
+
+      {/* Modular Popup Modal for System Notices, Errors & Confirmations */}
+      <PopupModal
+        data={modalData}
+        onClose={() => setModalData(null)}
+      />
     </div>
   );
 }

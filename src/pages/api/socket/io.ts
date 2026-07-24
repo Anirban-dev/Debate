@@ -151,7 +151,11 @@ const ioHandler = (
         if (!rawUsername) return;
 
         if (!activeRooms[targetRoomId]) {
-          activeRooms[targetRoomId] = createDefaultRoomState(targetRoomId);
+          socket.emit("room_not_found_error", {
+            roomId: targetRoomId,
+            message: `Lobby "${targetRoomId}" does not exist. Please check the Lobby ID or ask the host to create it.`
+          });
+          return;
         }
 
         const roomState = activeRooms[targetRoomId];

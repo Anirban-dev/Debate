@@ -44,7 +44,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       team2Time: team2TimeInput * 60,
       warningSeconds: warningThresholdInput
     });
-    alert('Match timer settings updated!');
   };
 
   const handleAddPlayerMidSession = () => {

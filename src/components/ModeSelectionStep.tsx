@@ -428,12 +428,18 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
                   type="text"
                   value={targetRoomId}
                   onChange={(e) => setTargetRoomId(e.target.value)}
-                  placeholder="Enter Room ID (or leave blank for main-lobby)"
+                  placeholder="Enter exact Room ID Handle"
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500"
                 />
                 <button
                   type="button"
-                  onClick={() => onEnterGame(targetRoomId || 'main-lobby')}
+                  onClick={() => {
+                    if (targetRoomId.trim()) {
+                      onEnterGame(targetRoomId.trim());
+                    } else {
+                      setErrorMsg("Please enter a valid Room ID Handle.");
+                    }
+                  }}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 rounded-xl transition text-xs shadow-lg shadow-blue-900/30"
                 >
                   Enter
@@ -445,7 +451,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Active Rooms in MongoDB
+                  Active Game Rooms
                 </span>
                 <button
                   onClick={fetchActiveRooms}
@@ -460,7 +466,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {activeRoomsList.length === 0 ? (
                   <p className="text-xs text-slate-500 italic p-3 text-center bg-slate-950/40 rounded-xl">
-                    No active room instances found. You can enter &apos;main-lobby&apos; or create a new game room above.
+                    No active rooms currently available. Create a new room as Host above or enter a Room ID.
                   </p>
                 ) : (
                   activeRoomsList.map((room) => (

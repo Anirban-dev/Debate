@@ -11,6 +11,7 @@ interface PlayerRosterGridProps {
   onAdminBanUser?: (targetUsername: string) => void;
   onUpdateTeamTime?: (team: TeamId, newTimeSeconds: number) => void;
   onUpdatePlayerTime?: (username: string, newTimeSeconds: number) => void;
+  onShowNotice?: (title: string, message: string) => void;
 }
 
 // Sub-component for rendering individual player webcam video preview
@@ -78,7 +79,11 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
 
   const handleStartTeamTimeEdit = (team: TeamId) => {
     if (isSessionRunning) {
-      alert("⚠️ Debate session is active! Admin must pause the debate session first before modifying team time.");
+      if (onShowNotice) {
+        onShowNotice("Session Active", "⚠️ Debate session is active! Admin must pause the debate session first before modifying team time.");
+      } else {
+        alert("⚠️ Debate session is active! Admin must pause the debate session first before modifying team time.");
+      }
       return;
     }
     const totalSecs = team === 'team1' ? (roomState.team1TotalTime || 300) : (roomState.team2TotalTime || 300);
@@ -214,7 +219,11 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
                       <button
                         onClick={() => {
                           if (isSessionRunning) {
-                            alert("⚠️ Debate session is active! Session must be paused before adjusting personal time.");
+                            if (onShowNotice) {
+                              onShowNotice("Session Active", "⚠️ Debate session is active! Session must be paused before adjusting personal time.");
+                            } else {
+                              alert("⚠️ Debate session is active! Session must be paused before adjusting personal time.");
+                            }
                             return;
                           }
                           setPlayerTimeInput(player.timeLimitSeconds || 100);
