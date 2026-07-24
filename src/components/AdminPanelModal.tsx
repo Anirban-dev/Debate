@@ -338,30 +338,51 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             {(!roomState.bannedUsernames || roomState.bannedUsernames.length === 0) ? (
               <p className="text-xs text-slate-500 italic py-2 text-center">No users currently banned from this lobby.</p>
             ) : (
-              roomState.bannedUsernames.map((bannedUser) => (
-                <div
-                  key={bannedUser}
-                  className="bg-slate-900 p-2.5 rounded-xl border border-red-900/30 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                    <span className="font-bold text-white font-mono">@{bannedUser}</span>
-                    <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-1.5 py-0.2 rounded font-mono">
-                      Banned
-                    </span>
-                  </div>
+              roomState.bannedUsernames.map((bannedUser) => {
+                const isRosterPlayer = roomState.registeredRoster?.find(
+                  r => r.username.toLowerCase() === bannedUser.toLowerCase()
+                );
 
-                  {onAdminUnbanUser && (
-                    <button
-                      onClick={() => onAdminUnbanUser(bannedUser)}
-                      className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 rounded text-[11px] font-bold transition flex items-center gap-1"
-                      title="Lift Ban and Allow Re-entry"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" /> Unban User
-                    </button>
-                  )}
-                </div>
-              ))
+                return (
+                  <div
+                    key={bannedUser}
+                    className="bg-slate-900 p-2.5 rounded-xl border border-red-900/40 flex items-center justify-between gap-2 text-xs shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                      <span className="font-bold text-white font-mono">@{bannedUser}</span>
+                      
+                      {isRosterPlayer ? (
+                        <span className={`text-[10px] border px-1.5 py-0.5 rounded font-bold uppercase ${
+                          isRosterPlayer.team === 'team1'
+                            ? 'bg-blue-950/80 text-blue-300 border-blue-800'
+                            : 'bg-red-950/80 text-red-300 border-red-800'
+                        }`}>
+                          🎮 Player ({isRosterPlayer.team === 'team1' ? 'Team 1' : 'Team 2'})
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-950/80 text-amber-300 border border-amber-800/80 px-1.5 py-0.5 rounded font-bold uppercase">
+                          👁️ Spectator / Viewer
+                        </span>
+                      )}
+                      
+                      <span className="text-[9px] bg-red-950 text-red-400 border border-red-900 px-1 py-0.2 rounded font-mono">
+                        Banned
+                      </span>
+                    </div>
+
+                    {onAdminUnbanUser && (
+                      <button
+                        onClick={() => onAdminUnbanUser(bannedUser)}
+                        className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 rounded text-[11px] font-bold transition flex items-center gap-1 shrink-0"
+                        title="Lift Ban and Allow Re-entry to Lobby"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" /> Unban User
+                      </button>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

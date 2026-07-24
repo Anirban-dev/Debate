@@ -15,8 +15,9 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   onToggleMedia,
   onControlTimer
 }) => {
-  const isMatchRunning = timer.isRunning || roomState.status === 'running' || roomState.status === 'paused';
-  const activePlayer = (isMatchRunning && timer.activePlayerId) ? roomState.players[timer.activePlayerId] : null;
+  const timer = roomState?.timer;
+  const isMatchRunning = roomState?.status === 'running' || roomState?.status === 'paused';
+  const activePlayer = (isMatchRunning && timer?.activePlayerId) ? roomState.players[timer.activePlayerId] : null;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
