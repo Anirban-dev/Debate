@@ -1,6 +1,6 @@
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
-import { initMongoDB, findUserByOAuthId, createOrUpdateOAuthUser } from '@/db/mongo';
+import { initMongoDB, findUserByOAuthIdOrEmail, createOrUpdateOAuthUser } from '@/db/mongo';
 
 export async function GET() {
   try {
@@ -16,7 +16,7 @@ export async function GET() {
     const email = session.user.email || undefined;
     const avatarUrl = session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${oauthId}`;
 
-    let dbUser = await findUserByOAuthId(oauthId);
+    let dbUser = await findUserByOAuthIdOrEmail(oauthId, email);
     if (!dbUser) {
       dbUser = await createOrUpdateOAuthUser({
         oauthId,
@@ -26,13 +26,14 @@ export async function GET() {
       });
     }
 
-    if (dbUser && dbUser.isProfileComplete && dbUser.username) {
+    if (dbUser && (dbUser.username || dbUser.isProfileComplete)) {
+      const username = dbUser.username || (email ? email.split('@')[0].replace(/[^a-z0-9_]/g, '') : 'player');
       return NextResponse.json({
         authenticated: true,
         needsUsername: false,
         user: {
           oauthId: dbUser.oauthId,
-          username: dbUser.username,
+          username,
           authProvider: dbUser.authProvider || 'nextauth',
           avatarUrl: dbUser.avatarUrl || avatarUrl,
         },

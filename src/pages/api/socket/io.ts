@@ -217,6 +217,17 @@ const ioHandler = (
         if (!currentRoomId || !currentUsername || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
 
+        const isAdminLeaving = currentUsername.toLowerCase() === roomState.adminUsername.toLowerCase();
+
+        if (isAdminLeaving && roomState.isPersonalLobby) {
+          io.to(currentRoomId).emit("session_ended_event", {
+            message: "The Admin Host left the lobby. The match session has been ended and room destroyed."
+          });
+          delete activeRooms[currentRoomId];
+          socket.leave(currentRoomId);
+          return;
+        }
+
         if (roomState.players[currentUsername]) {
           roomState.players[currentUsername].isOnline = false;
           updateSpectatorCount(roomState);
@@ -455,6 +466,18 @@ const ioHandler = (
           io.to(currentRoomId).emit("user_banned_event", { targetUsername: target });
           io.to(currentRoomId).emit("room_state_update", roomState);
         }
+      });
+
+      // Admin End Session & Destroy Lobby
+      socket.on("admin_end_session", () => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+
+        io.to(currentRoomId).emit("session_ended_event", {
+          message: "The Admin Host has ended the match session and destroyed the lobby."
+        });
+
+        // Completely delete room from memory so no traces remain
+        delete activeRooms[currentRoomId];
       });
 
       socket.on("disconnect", () => {

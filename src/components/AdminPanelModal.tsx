@@ -10,6 +10,7 @@ interface AdminPanelModalProps {
   onAdminUpdateRoster: (roster: { username: string; team: TeamId; personalizedTime?: number }[]) => void;
   onAdminKickUser: (targetUsername: string) => void;
   onAdminBanUser: (targetUsername: string) => void;
+  onAdminEndSession: () => void;
 }
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
@@ -19,7 +20,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onAdminUpdatePlayer,
   onAdminUpdateRoster,
   onAdminKickUser,
-  onAdminBanUser
+  onAdminBanUser,
+  onAdminEndSession
 }) => {
   const { timer, players, registeredRoster, isPersonalLobby } = roomState;
 
@@ -322,6 +324,28 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               ))
             )}
           </div>
+        </div>
+
+        {/* SECTION 4: DESTRUCTIVE / SESSION TERMINATION */}
+        <div className="bg-red-950/40 p-4 rounded-xl border border-red-900/60 flex items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-red-300 flex items-center gap-1.5">
+              🛑 End Session & Destroy Lobby
+            </h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Permanently ends this match session, evicts all participants, and completely deletes the room state from temporary memory. No persistent traces will remain.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (confirm('Are you sure you want to end this match session and destroy the room? All participants will be disconnected.')) {
+                onAdminEndSession();
+              }
+            }}
+            className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-950/80 transition flex items-center gap-2 shrink-0"
+          >
+            <Ban className="w-4 h-4" /> End & Destroy Room
+          </button>
         </div>
       </div>
     </div>

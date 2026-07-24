@@ -91,11 +91,28 @@ export function isMongoConnected() {
   return isDbConnected;
 }
 
-export async function findUserByOAuthId(oauthId: string) {
+export async function findUserByOAuthIdOrEmail(oauthId: string, email?: string) {
   if (isDbConnected) {
-    return UserModel.findOne({ oauthId });
+    const conditions: any[] = [{ oauthId }];
+    if (email) conditions.push({ email });
+    return UserModel.findOne({ $or: conditions });
   }
-  return memoryUsers.get(oauthId) || null;
+
+  if (memoryUsers.has(oauthId)) {
+    return memoryUsers.get(oauthId);
+  }
+  if (email) {
+    for (const user of memoryUsers.values()) {
+      if (user.email && user.email.toLowerCase() === email.toLowerCase()) {
+        return user;
+      }
+    }
+  }
+  return null;
+}
+
+export async function findUserByOAuthId(oauthId: string) {
+  return findUserByOAuthIdOrEmail(oauthId);
 }
 
 export async function findUserByUsername(username: string) {
@@ -118,7 +135,10 @@ export async function createOrUpdateOAuthUser(data: {
   avatarUrl?: string;
 }) {
   if (isDbConnected) {
-    let user = await UserModel.findOne({ oauthId: data.oauthId });
+    const conditions: any[] = [{ oauthId: data.oauthId }];
+    if (data.email) conditions.push({ email: data.email });
+
+    let user = await UserModel.findOne({ $or: conditions });
     if (!user) {
       user = new UserModel({
         oauthId: data.oauthId,
@@ -132,6 +152,7 @@ export async function createOrUpdateOAuthUser(data: {
       await user.save();
     } else {
       user.lastLogin = new Date();
+      user.oauthId = data.oauthId;
       if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
       if (data.email) user.email = data.email;
       await user.save();
@@ -140,6 +161,15 @@ export async function createOrUpdateOAuthUser(data: {
   }
 
   let user = memoryUsers.get(data.oauthId);
+  if (!user && data.email) {
+    for (const u of memoryUsers.values()) {
+      if (u.email && u.email.toLowerCase() === data.email.toLowerCase()) {
+        user = u;
+        break;
+      }
+    }
+  }
+
   if (!user) {
     user = {
       oauthId: data.oauthId,
@@ -152,13 +182,15 @@ export async function createOrUpdateOAuthUser(data: {
     memoryUsers.set(data.oauthId, user);
   } else {
     user.lastLogin = new Date();
+    user.oauthId = data.oauthId;
     if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
     if (data.email) user.email = data.email;
+    memoryUsers.set(data.oauthId, user);
   }
   return user;
 }
 
-export async function setUniqueUsername(oauthId: string, desiredUsername: string) {
+export async function setUniqueUsername(oauthId: string, desiredUsername: string, email?: string) {
   const cleanUsername = desiredUsername.trim().toLowerCase();
 
   // Validate format: 3-20 characters, alphanumeric & underscores only
@@ -168,23 +200,38 @@ export async function setUniqueUsername(oauthId: string, desiredUsername: string
 
   // Check if username is already claimed by another user
   const existingUser = await findUserByUsername(cleanUsername);
-  if (existingUser && (existingUser as any).oauthId !== oauthId) {
+  if (existingUser && (existingUser as any).oauthId !== oauthId && (!email || (existingUser as any).email !== email)) {
     throw new Error(`The username "@${cleanUsername}" is already taken by another player. Please choose another one.`);
   }
 
   if (isDbConnected) {
-    const user = await UserModel.findOne({ oauthId });
+    const conditions: any[] = [{ oauthId }];
+    if (email) conditions.push({ email });
+
+    let user = await UserModel.findOne({ $or: conditions });
     if (!user) throw new Error('OAuth user account not found');
     user.username = cleanUsername;
     user.isProfileComplete = true;
+    user.oauthId = oauthId;
     await user.save();
     return user;
   }
 
-  const user = memoryUsers.get(oauthId);
+  let user = memoryUsers.get(oauthId);
+  if (!user && email) {
+    for (const u of memoryUsers.values()) {
+      if (u.email && u.email.toLowerCase() === email.toLowerCase()) {
+        user = u;
+        break;
+      }
+    }
+  }
+
   if (!user) throw new Error('OAuth user account not found');
   user.username = cleanUsername;
   user.isProfileComplete = true;
+  user.oauthId = oauthId;
+  memoryUsers.set(oauthId, user);
   return user;
 }
 

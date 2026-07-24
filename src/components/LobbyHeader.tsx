@@ -8,6 +8,7 @@ interface LobbyHeaderProps {
   onControlTimer: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
   onOpenAdminPanel: () => void;
   onLeaveRoom: () => void;
+  onAdminEndSession?: () => void;
 }
 
 export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
@@ -15,7 +16,8 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
   currentUser,
   onControlTimer,
   onOpenAdminPanel,
-  onLeaveRoom
+  onLeaveRoom,
+  onAdminEndSession
 }) => {
   const { timer, spectatorCount } = roomState;
 
@@ -116,13 +118,31 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
           )}
 
           {currentUser?.role === 'admin' && (
-            <button
-              onClick={onOpenAdminPanel}
-              className="p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition shadow-md shadow-purple-950/50"
-              title="Admin Match Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                onClick={onOpenAdminPanel}
+                className="p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition shadow-md shadow-purple-950/50 flex items-center gap-1.5 text-xs font-semibold"
+                title="Admin Match Settings"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </button>
+
+              {onAdminEndSession && (
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to end this match session and destroy the room?')) {
+                      onAdminEndSession();
+                    }
+                  }}
+                  className="px-2.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition shadow-md shadow-red-950/50 flex items-center gap-1.5 text-xs font-bold"
+                  title="End Session & Destroy Lobby"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="hidden sm:inline">End Session</span>
+                </button>
+              )}
+            </>
           )}
 
           <button

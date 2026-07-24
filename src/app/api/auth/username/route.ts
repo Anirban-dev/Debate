@@ -21,10 +21,11 @@ export async function POST(req: NextRequest) {
     }
 
     const oauthId = session.user.id || session.user.email || 'user_unknown';
+    const email = session.user.email || undefined;
 
     await initMongoDB();
 
-    const updatedUser = await setUniqueUsername(oauthId, username);
+    const updatedUser = await setUniqueUsername(oauthId, username, email);
 
     const cleanUsername = username.trim().toLowerCase();
     const avatarUrl = updatedUser.avatarUrl || session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;

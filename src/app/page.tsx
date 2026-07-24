@@ -107,6 +107,14 @@ export default function Home() {
         setAppStep('mode_select');
       });
 
+      socketInstance.on('session_ended_event', (data: { message: string }) => {
+        alert(data.message || 'The match session has been ended and the lobby destroyed.');
+        setCurrentUser(null);
+        setRoomState(null);
+        setIsAdminPanelOpen(false);
+        setAppStep('mode_select');
+      });
+
       socketInstance.on('chat_error', (data: { message: string }) => {
         alert(data.message);
       });
@@ -233,6 +241,12 @@ export default function Home() {
     socket.emit('admin_ban_user', { targetUsername });
   };
 
+  const handleAdminEndSession = () => {
+    if (!socket) return;
+    socket.emit('admin_end_session');
+    setIsAdminPanelOpen(false);
+  };
+
   const handleAdminPromoteSpectator = (targetUsername: string, team: TeamId) => {
     if (!socket) return;
     socket.emit('admin_update_player', { targetUsername, role: 'player', team });
@@ -265,6 +279,7 @@ export default function Home() {
           onControlTimer={handleControlTimer}
           onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
           onLeaveRoom={handleLeaveRoom}
+          onAdminEndSession={handleAdminEndSession}
         />
       )}
 
@@ -458,6 +473,7 @@ export default function Home() {
           onAdminUpdateRoster={handleAdminUpdateRoster}
           onAdminKickUser={handleAdminKickUser}
           onAdminBanUser={handleAdminBanUser}
+          onAdminEndSession={handleAdminEndSession}
         />
       )}
     </div>
