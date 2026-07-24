@@ -8,6 +8,7 @@ interface LobbyHeaderProps {
   onControlTimer: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
   onOpenAdminPanel: () => void;
   onLeaveRoom: () => void;
+  onLogout: () => void;
   onAdminEndSession?: () => void;
 }
 
@@ -17,6 +18,7 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
   onControlTimer,
   onOpenAdminPanel,
   onLeaveRoom,
+  onLogout,
   onAdminEndSession
 }) => {
   const { timer, spectatorCount } = roomState;
@@ -32,8 +34,38 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-xl">
+      {/* Prominent Role & Mode Banner */}
+      <div className={`py-1.5 px-4 text-center text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 border-b ${
+        currentUser?.role === 'admin'
+          ? 'bg-purple-950 text-purple-200 border-purple-800/80'
+          : currentUser?.role === 'player'
+          ? currentUser.team === 'team1'
+            ? 'bg-blue-950 text-blue-200 border-blue-800/80'
+            : 'bg-red-950 text-red-200 border-red-800/80'
+          : 'bg-amber-950 text-amber-200 border-amber-800/80'
+      }`}>
+        {currentUser?.role === 'admin' ? (
+          <>
+            <Shield className="w-4 h-4 text-purple-400" />
+            <span>ROLE: ADMIN HOST &bull; FULL MATCH & TIMER CONTROL (@{currentUser.username})</span>
+          </>
+        ) : currentUser?.role === 'player' ? (
+          <>
+            <Users className={`w-4 h-4 ${currentUser.team === 'team1' ? 'text-blue-400' : 'text-red-400'}`} />
+            <span>
+              ROLE: {currentUser.team === 'team1' ? 'TEAM 1 (BLUE)' : 'TEAM 2 (RED)'} PLAYER &bull; @{currentUser.username}
+            </span>
+          </>
+        ) : (
+          <>
+            <Eye className="w-4 h-4 text-amber-400" />
+            <span>ROLE: SPECTATOR &bull; WATCHING MATCH & CHATTING (@{currentUser?.username || 'viewer'})</span>
+          </>
+        )}
+      </div>
+
       {/* Top Banner: Title & User Badge */}
-      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Left: App Brand & Room Title */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-900/30 font-bold">
@@ -52,7 +84,7 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
             <p className="text-xs text-slate-400 flex items-center gap-2">
               <span>Room ID: <span className="font-mono text-slate-300">{roomState.roomId}</span></span>
               <span>•</span>
-              <span className="flex items-center gap-1 text-amber-400">
+              <span className="flex items-center gap-1 text-amber-400 font-semibold">
                 <Eye className="w-3.5 h-3.5" />
                 {spectatorCount} Spectators Watching
               </span>
@@ -99,24 +131,8 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right: Current User Role & Logout */}
+        {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          {currentUser && (
-            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${
-              currentUser.role === 'admin'
-                ? 'bg-purple-950/50 border-purple-800 text-purple-300'
-                : currentUser.role === 'player'
-                ? currentUser.team === 'team1'
-                  ? 'bg-blue-950/50 border-blue-800 text-blue-300'
-                  : 'bg-red-950/50 border-red-800 text-red-300'
-                : 'bg-amber-950/50 border-amber-800 text-amber-300'
-            }`}>
-              {currentUser.role === 'admin' ? <Shield className="w-3.5 h-3.5" /> : currentUser.role === 'player' ? <Users className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              <span>@{currentUser.username}</span>
-              <span className="opacity-75 uppercase text-[10px] font-mono">({currentUser.role})</span>
-            </div>
-          )}
-
           {currentUser?.role === 'admin' && (
             <>
               <button
@@ -145,12 +161,34 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
             </>
           )}
 
+          {/* Players & Spectators get Leave Room button; Admin Host can only End Session */}
+          {currentUser?.role !== 'admin' && (
+            <button
+              onClick={onLeaveRoom}
+              className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg transition text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
+              title="Leave Match Room"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Leave Room</span>
+            </button>
+          )}
+
           <button
-            onClick={onLeaveRoom}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
-            title="Leave / Change Role"
+            onClick={() => {
+              if (currentUser?.role === 'admin') {
+                if (confirm('As Admin Host, logging out will end this match session and destroy the room for all participants. Continue?')) {
+                  if (onAdminEndSession) onAdminEndSession();
+                  onLogout();
+                }
+              } else {
+                onLogout();
+              }
+            }}
+            className="px-2.5 py-2 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg transition text-xs font-bold flex items-center gap-1.5"
+            title="Log Out completely"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4 text-red-400" />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>

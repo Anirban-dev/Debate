@@ -28,7 +28,23 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<Player | null>(null);
   const [currentRoomId, setCurrentRoomId] = useState<string>('main-lobby');
 
+  const currentUserRef = React.useRef<Player | null>(null);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+
+  // Floating toasts for real-time player join/leave events
+  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+
+  const addToast = (message: string) => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // View navigation tab in match lobby: 'stage' | 'spectators' | 'notes' | 'chat' | 'all'
   const [activeViewTab, setActiveViewTab] = useState<'stage' | 'spectators' | 'notes' | 'chat' | 'all'>('stage');
@@ -52,7 +68,7 @@ export default function Home() {
     checkSession();
   }, []);
 
-  // Initialize Socket.IO connection
+  // Initialize Socket.IO connection ONCE
   useEffect(() => {
     let socketInstance: Socket | null = null;
 
@@ -72,29 +88,37 @@ export default function Home() {
       socketInstance.on('joined_room_ack', (data: { roomState: MatchRoomState; assignedPlayer: Player }) => {
         setRoomState(data.roomState);
         setCurrentUser(data.assignedPlayer);
+        currentUserRef.current = data.assignedPlayer;
         setAppStep('in_game');
       });
 
       socketInstance.on('room_state_update', (updatedState: MatchRoomState) => {
         setRoomState(updatedState);
-        if (currentUser && updatedState.players[currentUser.username]) {
-          setCurrentUser(updatedState.players[currentUser.username]);
+        const me = currentUserRef.current;
+        if (me && updatedState.players[me.username]) {
+          const updatedMe = updatedState.players[me.username];
+          setCurrentUser(updatedMe);
+          currentUserRef.current = updatedMe;
         }
       });
 
       socketInstance.on('user_kicked_event', (data: { targetUsername: string }) => {
-        if (currentUser && currentUser.username === data.targetUsername) {
+        const me = currentUserRef.current;
+        if (me && me.username === data.targetUsername) {
           alert('You have been kicked from the lobby by the admin.');
           setCurrentUser(null);
+          currentUserRef.current = null;
           setRoomState(null);
           setAppStep('mode_select');
         }
       });
 
       socketInstance.on('user_banned_event', (data: { targetUsername: string }) => {
-        if (currentUser && currentUser.username === data.targetUsername) {
+        const me = currentUserRef.current;
+        if (me && me.username === data.targetUsername) {
           alert('You have been banned from this lobby by the admin.');
           setCurrentUser(null);
+          currentUserRef.current = null;
           setRoomState(null);
           setAppStep('mode_select');
         }
@@ -103,6 +127,7 @@ export default function Home() {
       socketInstance.on('banned_error', (data: { message: string }) => {
         alert(data.message);
         setCurrentUser(null);
+        currentUserRef.current = null;
         setRoomState(null);
         setAppStep('mode_select');
       });
@@ -110,9 +135,16 @@ export default function Home() {
       socketInstance.on('session_ended_event', (data: { message: string }) => {
         alert(data.message || 'The match session has been ended and the lobby destroyed.');
         setCurrentUser(null);
+        currentUserRef.current = null;
         setRoomState(null);
         setIsAdminPanelOpen(false);
         setAppStep('mode_select');
+      });
+
+      socketInstance.on('player_toast_event', (data: { message: string }) => {
+        if (data?.message) {
+          addToast(data.message);
+        }
       });
 
       socketInstance.on('chat_error', (data: { message: string }) => {
@@ -129,7 +161,7 @@ export default function Home() {
         socketInstance.disconnect();
       }
     };
-  }, [currentUser?.username]);
+  }, []);
 
   // Step 1 Complete: User Login
   const handleLoginSuccess = (user: { username: string; authProvider: string; avatarUrl: string }) => {
@@ -279,6 +311,7 @@ export default function Home() {
           onControlTimer={handleControlTimer}
           onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
           onLeaveRoom={handleLeaveRoom}
+          onLogout={handleLogout}
           onAdminEndSession={handleAdminEndSession}
         />
       )}
@@ -476,6 +509,27 @@ export default function Home() {
           onAdminEndSession={handleAdminEndSession}
         />
       )}
+
+      {/* Floating Real-time Player Join/Leave Toasts */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto bg-slate-900/95 text-slate-100 border border-blue-500/50 shadow-2xl shadow-blue-950/80 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between gap-3 backdrop-blur-md transition-all transform duration-300"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping shrink-0" />
+              <span>{toast.message}</span>
+            </div>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-slate-400 hover:text-white text-xs font-extrabold px-1"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

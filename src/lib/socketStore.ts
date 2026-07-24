@@ -22,12 +22,7 @@ export function createDefaultRoomState(
     isPersonalLobby,
     players: {},
     bannedUsernames: [],
-    registeredRoster: [
-      { username: "alex_blue", team: "team1", personalizedTime: 180 },
-      { username: "jordan_blue", team: "team1", personalizedTime: 180 },
-      { username: "sarah_red", team: "team2", personalizedTime: 180 },
-      { username: "sam_red", team: "team2", personalizedTime: 180 }
-    ],
+    registeredRoster: [],
     teamNotes: {
       team1: {
         teamId: "team1",

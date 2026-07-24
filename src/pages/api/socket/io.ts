@@ -197,6 +197,13 @@ const ioHandler = (
           assignedPlayer: playerObj
         });
 
+        // Only emit player toasts for PLAYERS and ADMIN, NOT spectators!
+        if (role === "player" || role === "admin") {
+          io.to(targetRoomId).emit("player_toast_event", {
+            message: `⚡ @${rawUsername} joined the game as ${role === 'admin' ? 'Admin Host' : `Player (${team?.toUpperCase() || 'PLAYER'})`}`
+          });
+        }
+
         const joinMsg: ChatMessage = {
           id: `sys-join-${Date.now()}`,
           senderId: "system",
@@ -228,9 +235,17 @@ const ioHandler = (
           return;
         }
 
-        if (roomState.players[currentUsername]) {
-          roomState.players[currentUsername].isOnline = false;
+        const leavingPlayer = roomState.players[currentUsername];
+        if (leavingPlayer) {
+          const wasPlayerOrAdmin = leavingPlayer.role === 'player' || leavingPlayer.role === 'admin';
+          leavingPlayer.isOnline = false;
           updateSpectatorCount(roomState);
+
+          if (wasPlayerOrAdmin) {
+            io.to(currentRoomId).emit("player_toast_event", {
+              message: `👋 @${currentUsername} left the game.`
+            });
+          }
 
           roomState.chatMessages.push({
             id: `sys-leave-${Date.now()}`,
@@ -387,11 +402,21 @@ const ioHandler = (
 
         if (payload.team) player.team = payload.team;
         if (payload.role) {
+          const oldRole = player.role;
           player.role = payload.role;
           if (payload.role === 'spectator') {
             player.team = undefined;
             player.isMuted = true;
             player.isVideoOff = true;
+            if (oldRole === 'player' || oldRole === 'admin') {
+              io.to(currentRoomId).emit("player_toast_event", {
+                message: `👋 @${payload.targetUsername} left the players roster.`
+              });
+            }
+          } else if (payload.role === 'player') {
+            io.to(currentRoomId).emit("player_toast_event", {
+              message: `⚡ @${payload.targetUsername} added as Player (${payload.team?.toUpperCase() || ''})`
+            });
           }
         }
         if (payload.isMutedByAdmin !== undefined) {
@@ -483,9 +508,18 @@ const ioHandler = (
       socket.on("disconnect", () => {
         if (currentRoomId && currentUsername && activeRooms[currentRoomId]) {
           const roomState = activeRooms[currentRoomId];
-          if (roomState.players[currentUsername]) {
-            roomState.players[currentUsername].isOnline = false;
+          const leavingPlayer = roomState.players[currentUsername];
+          if (leavingPlayer) {
+            const wasPlayerOrAdmin = leavingPlayer.role === 'player' || leavingPlayer.role === 'admin';
+            leavingPlayer.isOnline = false;
             updateSpectatorCount(roomState);
+
+            if (wasPlayerOrAdmin) {
+              io.to(currentRoomId).emit("player_toast_event", {
+                message: `👋 @${currentUsername} left the game.`
+              });
+            }
+
             io.to(currentRoomId).emit("room_state_update", roomState);
           }
         }

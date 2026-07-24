@@ -18,7 +18,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
   // Active rooms list for "Enter a Game"
   const [activeRoomsList, setActiveRoomsList] = useState<any[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
-  const [targetRoomId, setTargetRoomId] = useState('main-lobby');
+  const [targetRoomId, setTargetRoomId] = useState('');
 
   // "Create a Game" Admin Form state
   const [newRoomId, setNewRoomId] = useState('');
@@ -33,12 +33,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
   const [rosterInputTime, setRosterInputTime] = useState(180);
   const [registeredRoster, setRegisteredRoster] = useState<
     { username: string; team: TeamId; personalizedTime: number }[]
-  >([
-    { username: 'alex_blue', team: 'team1', personalizedTime: 180 },
-    { username: 'jordan_blue', team: 'team1', personalizedTime: 180 },
-    { username: 'sarah_red', team: 'team2', personalizedTime: 180 },
-    { username: 'sam_red', team: 'team2', personalizedTime: 180 }
-  ]);
+  >([]);
 
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -433,7 +428,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
                   type="text"
                   value={targetRoomId}
                   onChange={(e) => setTargetRoomId(e.target.value)}
-                  placeholder="e.g. main-lobby"
+                  placeholder="Enter Room ID (or leave blank for main-lobby)"
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500"
                 />
                 <button
