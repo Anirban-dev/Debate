@@ -3,7 +3,7 @@ import { signIn } from 'next-auth/react';
 import { ArrowRight, Disc as DiscordIcon, ShieldCheck, AtSign, CheckCircle2, Copy, Info, UserCheck } from 'lucide-react';
 
 interface LoginStepProps {
-  onLoginSuccess: (user: { username: string; authProvider: string; avatarUrl: string }) => void;
+  onLoginSuccess: (user: { username: string }) => void;
 }
 
 export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {

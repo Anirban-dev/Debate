@@ -1,6 +1,6 @@
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
-import { initMongoDB, findUserByOAuthIdOrEmail, createOrUpdateOAuthUser } from '@/db/mongo';
+import { initMongoDB, findUserByOAuthIdOrEmail } from '@/db/mongo';
 
 export async function GET() {
   try {
@@ -14,28 +14,16 @@ export async function GET() {
 
     const oauthId = session.user.id || session.user.email || 'user_unknown';
     const email = session.user.email || undefined;
-    const avatarUrl = session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${oauthId}`;
 
-    let dbUser = await findUserByOAuthIdOrEmail(oauthId, email);
-    if (!dbUser) {
-      dbUser = await createOrUpdateOAuthUser({
-        oauthId,
-        email,
-        authProvider: 'nextauth',
-        avatarUrl,
-      });
-    }
+    const dbUser = await findUserByOAuthIdOrEmail(oauthId, email);
 
-    if (dbUser && (dbUser.username || dbUser.isProfileComplete)) {
-      const username = dbUser.username || (email ? email.split('@')[0].replace(/[^a-z0-9_]/g, '') : 'player');
+    if (dbUser && dbUser.username) {
       return NextResponse.json({
         authenticated: true,
         needsUsername: false,
         user: {
           oauthId: dbUser.oauthId,
-          username,
-          authProvider: dbUser.authProvider || 'nextauth',
-          avatarUrl: dbUser.avatarUrl || avatarUrl,
+          username: dbUser.username,
         },
       });
     }
@@ -46,7 +34,6 @@ export async function GET() {
       pendingUser: {
         oauthId,
         email,
-        avatarUrl,
       },
     });
   } catch (err: any) {
@@ -54,3 +41,4 @@ export async function GET() {
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   }
 }
+

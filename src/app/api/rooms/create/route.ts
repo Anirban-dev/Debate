@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { activeRooms } from '@/lib/socketStore';
 import { MatchRoomState } from '@/types';
-import { initMongoDB, isMongoConnected, upsertRoom } from '@/db/mongo';
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,23 +71,10 @@ export async function POST(req: NextRequest) {
 
     activeRooms[cleanRoomId] = newRoomState;
 
-    await initMongoDB();
-
-    if (isMongoConnected()) {
-      await upsertRoom({
-        roomId: cleanRoomId,
-        roomTitle: newRoomState.roomTitle,
-        adminUsername: cleanAdmin,
-        team1TotalTime: Number(team1TotalTime),
-        team2TotalTime: Number(team2TotalTime),
-        warningThresholdSeconds: Number(warningThresholdSeconds),
-        registeredRoster: newRoomState.registeredRoster
-      });
-    }
-
     return NextResponse.json({ success: true, room: newRoomState });
   } catch (err: any) {
     console.error('Create room error:', err);
     return NextResponse.json({ error: err.message || 'Room creation failed' }, { status: 500 });
   }
 }
+

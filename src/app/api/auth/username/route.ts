@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { initMongoDB, setUniqueUsername } from '@/db/mongo';
+import { initMongoDB, saveCompleteUser } from '@/db/mongo';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,17 +25,14 @@ export async function POST(req: NextRequest) {
 
     await initMongoDB();
 
-    const updatedUser = await setUniqueUsername(oauthId, username, email);
-
-    const cleanUsername = username.trim().toLowerCase();
-    const avatarUrl = updatedUser.avatarUrl || session.user.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`;
+    const savedUser = await saveCompleteUser(oauthId, username, email);
+    const cleanUsername = savedUser.username;
 
     return NextResponse.json({
       success: true,
       user: {
+        oauthId: savedUser.oauthId,
         username: cleanUsername,
-        authProvider: 'nextauth',
-        avatarUrl,
       },
     });
   } catch (err: any) {
@@ -43,3 +40,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Failed to claim username' }, { status: 400 });
   }
 }
+

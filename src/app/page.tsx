@@ -21,7 +21,7 @@ export default function Home() {
   const [appStep, setAppStep] = useState<'login' | 'mode_select' | 'in_game'>('login');
 
   // Authenticated user from LoginStep
-  const [authUser, setAuthUser] = useState<{ username: string; authProvider: string; avatarUrl: string } | null>(null);
+  const [authUser, setAuthUser] = useState<{ username: string } | null>(null);
 
   // Active room state and player role object
   const [roomState, setRoomState] = useState<MatchRoomState | null>(null);
@@ -164,7 +164,7 @@ export default function Home() {
   }, []);
 
   // Step 1 Complete: User Login
-  const handleLoginSuccess = (user: { username: string; authProvider: string; avatarUrl: string }) => {
+  const handleLoginSuccess = (user: { username: string }) => {
     setAuthUser(user);
     setAppStep('mode_select');
   };
