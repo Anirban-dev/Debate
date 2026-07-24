@@ -544,6 +544,7 @@ export default function Home() {
                   roomState={roomState}
                   currentUser={currentUser}
                   onSendChat={handleSendChat}
+                  onShowNotice={(title, msg) => showModal(title, msg, 'warning')}
                 />
               </div>
             </div>

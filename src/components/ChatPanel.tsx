@@ -6,12 +6,14 @@ interface ChatPanelProps {
   roomState: MatchRoomState;
   currentUser: Player | null;
   onSendChat: (channel: ChatChannel, text: string) => void;
+  onShowNotice?: (title: string, message: string) => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   roomState,
   currentUser,
-  onSendChat
+  onSendChat,
+  onShowNotice
 }) => {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('global');
   const [inputText, setInputText] = useState('');
@@ -28,13 +30,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     // Check spectator channel restriction
     if (currentUser?.role === 'spectator' && activeChannel !== 'global') {
-      alert('Spectators can only post in Global Chat.');
+      if (onShowNotice) {
+        onShowNotice('Channel Restricted', 'Spectators can only post in Global Chat.');
+      } else {
+        alert('Spectators can only post in Global Chat.');
+      }
       return;
     }
 
     // Check team channel restriction
     if (currentUser?.role === 'player' && activeChannel !== 'global' && activeChannel !== currentUser.team) {
-      alert('You can only post in your assigned team channel or Global Chat.');
+      if (onShowNotice) {
+        onShowNotice('Team Channel Locked', 'You can only post in your assigned team channel or Global Chat.');
+      } else {
+        alert('You can only post in your assigned team channel or Global Chat.');
+      }
       return;
     }
 
