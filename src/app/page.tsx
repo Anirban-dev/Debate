@@ -147,6 +147,18 @@ export default function Home() {
         }
       });
 
+      socketInstance.on('team_time_prompt_event', (data: { team: TeamId; message: string }) => {
+        if (data?.message) {
+          addToast(data.message);
+        }
+      });
+
+      socketInstance.on('time_update_error', (data: { message: string }) => {
+        if (data?.message) {
+          addToast(`⚠️ ${data.message}`);
+        }
+      });
+
       socketInstance.on('chat_error', (data: { message: string }) => {
         alert(data.message);
       });
@@ -279,6 +291,16 @@ export default function Home() {
     setIsAdminPanelOpen(false);
   };
 
+  const handleUpdateTeamTime = (team: TeamId, newTimeSeconds: number) => {
+    if (!socket) return;
+    socket.emit('update_team_time', { team, newTimeSeconds });
+  };
+
+  const handleUpdatePlayerTime = (username: string, newTimeSeconds: number) => {
+    if (!socket) return;
+    socket.emit('update_player_time', { username, newTimeSeconds });
+  };
+
   const handleAdminPromoteSpectator = (targetUsername: string, team: TeamId) => {
     if (!socket) return;
     socket.emit('admin_update_player', { targetUsername, role: 'player', team });
@@ -404,6 +426,7 @@ export default function Home() {
                   roomState={roomState}
                   currentUser={currentUser}
                   onToggleMedia={handleToggleMedia}
+                  onControlTimer={handleControlTimer}
                 />
               </div>
 
@@ -415,6 +438,8 @@ export default function Home() {
                   onAdminUpdatePlayer={handleAdminUpdatePlayer}
                   onAdminKickUser={handleAdminKickUser}
                   onAdminBanUser={handleAdminBanUser}
+                  onUpdateTeamTime={handleUpdateTeamTime}
+                  onUpdatePlayerTime={handleUpdatePlayerTime}
                 />
               </div>
             </div>

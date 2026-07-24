@@ -25,6 +25,31 @@ function updateSpectatorCount(roomState: MatchRoomState) {
   roomState.spectatorCount = count;
 }
 
+function recalculateTeamEqualTime(roomState: MatchRoomState, team: TeamId) {
+  const totalTeamTime = team === "team1" ? roomState.team1TotalTime : roomState.team2TotalTime;
+  const teamPlayers = (Object.values(roomState.players) as Player[]).filter(
+    p => p.role === "player" && p.team === team
+  );
+  if (teamPlayers.length === 0) return;
+
+  // Filter for players who have NOT finished speaking yet (remainingSeconds > 0)
+  const remainingPlayers = teamPlayers.filter(p => p.remainingSeconds > 0);
+  const targetPlayers = remainingPlayers.length > 0 ? remainingPlayers : teamPlayers;
+
+  // Calculate time consumed by players who have already finished speaking
+  const consumedTime = teamPlayers
+    .filter(p => p.remainingSeconds <= 0)
+    .reduce((acc, p) => acc + (p.timeLimitSeconds || 0), 0);
+
+  const availableTimeForRemaining = Math.max(10, totalTeamTime - consumedTime);
+  const equalShare = Math.max(10, Math.floor(availableTimeForRemaining / targetPlayers.length));
+
+  targetPlayers.forEach(p => {
+    p.timeLimitSeconds = equalShare;
+    p.remainingSeconds = equalShare;
+  });
+}
+
 function startTimerLoop(io: ServerIO) {
   if (global.timerInterval) return;
 
@@ -238,8 +263,13 @@ const ioHandler = (
         const leavingPlayer = roomState.players[currentUsername];
         if (leavingPlayer) {
           const wasPlayerOrAdmin = leavingPlayer.role === 'player' || leavingPlayer.role === 'admin';
-          leavingPlayer.isOnline = false;
+          const leavingTeam = leavingPlayer.team;
+          delete roomState.players[currentUsername];
           updateSpectatorCount(roomState);
+
+          if (leavingTeam) {
+            recalculateTeamEqualTime(roomState, leavingTeam);
+          }
 
           if (wasPlayerOrAdmin) {
             io.to(currentRoomId).emit("player_toast_event", {
@@ -493,6 +523,63 @@ const ioHandler = (
         }
       });
 
+      // Update team total time (Admin or Team click)
+      socket.on("update_team_time", (payload: { team: TeamId; newTimeSeconds: number }) => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+
+        if (roomState.timer.isRunning) {
+          socket.emit("time_update_error", {
+            message: "Cannot modify time while debate session is active. Please pause the session first!"
+          });
+          return;
+        }
+
+        const seconds = Math.max(10, Math.min(3600, payload.newTimeSeconds));
+        if (payload.team === 'team1') {
+          roomState.team1TotalTime = seconds;
+          roomState.timer.team1TimeRemaining = seconds;
+        } else if (payload.team === 'team2') {
+          roomState.team2TotalTime = seconds;
+          roomState.timer.team2TimeRemaining = seconds;
+        }
+        recalculateTeamEqualTime(roomState, payload.team);
+
+        const teamLabel = payload.team === 'team1' ? 'Team 1 (Blue)' : 'Team 2 (Red)';
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const formattedTime = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+        io.to(currentRoomId).emit("team_time_prompt_event", {
+          team: payload.team,
+          message: `📢 ${teamLabel} total time updated to ${formattedTime}. Remaining time has been equally redistributed among active speakers.`
+        });
+
+        io.to(currentRoomId).emit("room_state_update", roomState);
+      });
+
+      // Update individual player time share (Only player themselves can adjust)
+      socket.on("update_player_time", (payload: { username: string; newTimeSeconds: number }) => {
+        if (!currentRoomId || !activeRooms[currentRoomId]) return;
+        const roomState = activeRooms[currentRoomId];
+
+        if (roomState.timer.isRunning) {
+          socket.emit("time_update_error", {
+            message: "Cannot adjust personal time while debate session is active. Please pause the session first!"
+          });
+          return;
+        }
+
+        if (payload.username !== currentUsername) return; // Strict: player can only update their own time
+        const player = roomState.players[payload.username];
+        if (!player) return;
+
+        const seconds = Math.max(5, Math.min(1800, payload.newTimeSeconds));
+        player.timeLimitSeconds = seconds;
+        player.remainingSeconds = seconds;
+        io.to(currentRoomId).emit("room_state_update", roomState);
+      });
+
       // Admin End Session & Destroy Lobby
       socket.on("admin_end_session", () => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
@@ -511,8 +598,13 @@ const ioHandler = (
           const leavingPlayer = roomState.players[currentUsername];
           if (leavingPlayer) {
             const wasPlayerOrAdmin = leavingPlayer.role === 'player' || leavingPlayer.role === 'admin';
-            leavingPlayer.isOnline = false;
+            const leavingTeam = leavingPlayer.team;
+            delete roomState.players[currentUsername];
             updateSpectatorCount(roomState);
+
+            if (leavingTeam) {
+              recalculateTeamEqualTime(roomState, leavingTeam);
+            }
 
             if (wasPlayerOrAdmin) {
               io.to(currentRoomId).emit("player_toast_event", {

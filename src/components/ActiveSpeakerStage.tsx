@@ -6,12 +6,14 @@ interface ActiveSpeakerStageProps {
   roomState: MatchRoomState;
   currentUser: Player | null;
   onToggleMedia?: (mediaType: 'mic' | 'video', value: boolean) => void;
+  onControlTimer?: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
 }
 
 export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   roomState,
   currentUser,
-  onToggleMedia
+  onToggleMedia,
+  onControlTimer
 }) => {
   const { timer } = roomState;
   const activePlayer = timer.activePlayerId ? roomState.players[timer.activePlayerId] : null;
@@ -157,23 +159,43 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
 
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3 relative overflow-hidden">
-      {/* Top Header */}
-      <div className="flex items-center justify-between">
+      {/* Top Header & Lobby Status */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              timer.isRunning ? 'bg-red-400' : 'bg-amber-400'
+            }`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+              timer.isRunning ? 'bg-red-500' : 'bg-amber-500'
+            }`}></span>
           </span>
           <span className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
             Active Speaker Spotlight Stage
           </span>
+          {!timer.isRunning && (
+            <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-800/80 px-2 py-0.5 rounded-full font-bold">
+              Match Lobby (Paused)
+            </span>
+          )}
         </div>
 
-        {currentUser?.role === 'spectator' && (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
-            <Eye className="w-3.5 h-3.5" /> Spectator Lounge Mode
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {currentUser?.role === 'admin' && !timer.isRunning && onControlTimer && (
+            <button
+              onClick={() => onControlTimer('start')}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-lg shadow-md shadow-emerald-950/60 transition flex items-center gap-1.5 animate-pulse"
+            >
+              🚀 Start Debate Session
+            </button>
+          )}
+
+          {currentUser?.role === 'spectator' && (
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+              <Eye className="w-3.5 h-3.5" /> Spectator Lounge Mode
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Main Stage View Box */}
