@@ -2,11 +2,15 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import DiscordProvider from "next-auth/providers/discord";
 
+process.env.AUTH_TRUST_HOST = "true";
+
 if (!process.env.AUTH_SECRET) {
   process.env.AUTH_SECRET = process.env.NEXTAUTH_SECRET || "match-lobby-nextauth-secret-key-2026";
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "match-lobby-nextauth-secret-key-2026",
+  trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "google-client-id-placeholder",

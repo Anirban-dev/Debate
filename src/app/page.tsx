@@ -97,7 +97,11 @@ export default function Home() {
     let socketInstance: Socket | null = null;
 
     const initSocket = async () => {
-      await fetch('/api/socket/io');
+      try {
+        await fetch('/api/socket/io');
+      } catch (err) {
+        console.warn('Socket pre-flight fetch error:', err);
+      }
 
       socketInstance = io({
         path: '/api/socket/io',

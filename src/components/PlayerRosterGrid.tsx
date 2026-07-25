@@ -81,8 +81,8 @@ const PlayerStreamBox: React.FC<{
 export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
   roomState,
   currentUser,
-  localStream,
-  remoteStreams,
+  localStream = null,
+  remoteStreams = {},
   onToggleMedia,
   onAdminUpdatePlayer,
   onAdminKickUser,

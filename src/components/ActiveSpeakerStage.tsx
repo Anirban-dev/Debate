@@ -14,7 +14,7 @@ interface ActiveSpeakerStageProps {
 export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   roomState,
   currentUser,
-  localStream,
+  localStream = null,
   remoteStreams = {},
   onToggleMedia,
   onControlTimer
