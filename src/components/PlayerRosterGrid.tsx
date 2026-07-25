@@ -81,12 +81,15 @@ const PlayerStreamBox: React.FC<{
 export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
   roomState,
   currentUser,
+  localStream,
+  remoteStreams,
   onToggleMedia,
   onAdminUpdatePlayer,
   onAdminKickUser,
   onAdminBanUser,
   onUpdateTeamTime,
-  onUpdatePlayerTime
+  onUpdatePlayerTime,
+  onShowNotice
 }) => {
   const { players, timer } = roomState;
 
