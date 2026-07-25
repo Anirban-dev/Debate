@@ -50,6 +50,48 @@ function recalculateTeamEqualTime(roomState: MatchRoomState, team: TeamId) {
   });
 }
 
+function getSanitizedRoomStateForPlayer(roomState: MatchRoomState, player: Player | null): MatchRoomState {
+  const isTeam1Player = player?.role === 'player' && player?.team === 'team1';
+  const isTeam2Player = player?.role === 'player' && player?.team === 'team2';
+
+  // Allowed channels for this specific recipient:
+  // Admin & Spectators ONLY get 'global' chat messages.
+  // Team 1 players get 'global' + 'team1' chat messages.
+  // Team 2 players get 'global' + 'team2' chat messages.
+  const allowedChannels: string[] = ['global'];
+  if (isTeam1Player) allowedChannels.push('team1');
+  if (isTeam2Player) allowedChannels.push('team2');
+
+  const filteredChatMessages = (roomState.chatMessages || []).filter(m => allowedChannels.includes(m.channel));
+
+  // Sanitize secret team strategy notes so spectators, admins, and opposing teams cannot read them in WS payloads
+  const sanitizedTeamNotes = {
+    team1: isTeam1Player ? roomState.teamNotes.team1 : { title: 'Team 1 Notes', content: '', updatedAt: 0 },
+    team2: isTeam2Player ? roomState.teamNotes.team2 : { title: 'Team 2 Notes', content: '', updatedAt: 0 }
+  };
+
+  return {
+    ...roomState,
+    chatMessages: filteredChatMessages,
+    teamNotes: sanitizedTeamNotes
+  };
+}
+
+function broadcastSanitizedRoomState(io: ServerIO, roomState: MatchRoomState) {
+  const roomSockets = io.sockets.adapter.rooms.get(roomState.roomId);
+  if (!roomSockets) return;
+
+  for (const socketId of roomSockets) {
+    const s = io.sockets.sockets.get(socketId);
+    if (s) {
+      const username = (s as any).currentUsername;
+      const player = username ? roomState.players[username] : null;
+      const sanitized = getSanitizedRoomStateForPlayer(roomState, player);
+      s.emit("room_state_update", sanitized);
+    }
+  }
+}
+
 function startTimerLoop(io: ServerIO) {
   if (global.timerInterval) return;
 
@@ -80,7 +122,7 @@ function startTimerLoop(io: ServerIO) {
         if (timer.turnTimeRemaining <= timer.warningThresholdSeconds && !timer.isWarningActive) {
           timer.isWarningActive = true;
           roomState.chatMessages.push({
-            id: `sys-warn-${Date.now()}`,
+            id: `sys-warn-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -104,7 +146,7 @@ function startTimerLoop(io: ServerIO) {
           const player = roomState.players[timer.activePlayerId];
           player.isMuted = true;
           roomState.chatMessages.push({
-            id: `sys-mute-${Date.now()}`,
+            id: `sys-mute-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -119,7 +161,7 @@ function startTimerLoop(io: ServerIO) {
       }
 
       if (stateChanged) {
-        io.to(roomState.roomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       }
     });
   }, 1000);
@@ -168,6 +210,7 @@ const ioHandler = (
 
         currentUsername = rawUsername;
         currentRoomId = targetRoomId;
+        (socket as any).currentUsername = rawUsername;
 
         socket.join(targetRoomId);
 
@@ -222,7 +265,7 @@ const ioHandler = (
         updateSpectatorCount(roomState);
 
         socket.emit("joined_room_ack", {
-          roomState,
+          roomState: getSanitizedRoomStateForPlayer(roomState, playerObj),
           assignedPlayer: playerObj
         });
 
@@ -234,7 +277,7 @@ const ioHandler = (
         }
 
         const joinMsg: ChatMessage = {
-          id: `sys-join-${Date.now()}`,
+          id: `sys-join-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           senderId: "system",
           senderName: "System",
           senderRole: "admin",
@@ -245,7 +288,7 @@ const ioHandler = (
         };
         roomState.chatMessages.push(joinMsg);
 
-        io.to(targetRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Spectators or Players leaving voluntarily
@@ -282,7 +325,7 @@ const ioHandler = (
           }
 
           roomState.chatMessages.push({
-            id: `sys-leave-${Date.now()}`,
+            id: `sys-leave-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -292,7 +335,7 @@ const ioHandler = (
             isSystem: true
           });
 
-          io.to(currentRoomId).emit("room_state_update", roomState);
+          broadcastSanitizedRoomState(io, roomState);
         }
 
         socket.leave(currentRoomId);
@@ -316,7 +359,7 @@ const ioHandler = (
           if (!player.isVideoOffByAdmin) player.isVideoOff = payload.value;
         }
 
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Chat Messages
@@ -326,8 +369,8 @@ const ioHandler = (
         const player = roomState.players[payload.senderUsername];
         if (!player) return;
 
-        if (player.role === "spectator" && payload.channel !== "global") {
-          socket.emit("chat_error", { message: "Spectators can only participate in Global Chat." });
+        if ((player.role === "admin" || player.role === "spectator") && payload.channel !== "global") {
+          socket.emit("chat_error", { message: "Admins and spectators can only post in Global Chat." });
           return;
         }
 
@@ -337,7 +380,7 @@ const ioHandler = (
         }
 
         const msg: ChatMessage = {
-          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           senderId: player.username,
           senderName: player.username,
           senderRole: player.role,
@@ -350,7 +393,7 @@ const ioHandler = (
         roomState.chatMessages.push(msg);
         if (roomState.chatMessages.length > 200) roomState.chatMessages.shift();
 
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Secret Team Shared Notes Update (Team 1 or Team 2)
@@ -372,7 +415,7 @@ const ioHandler = (
           note.lastEditedBy = payload.username;
           note.updatedAt = Date.now();
 
-          io.to(currentRoomId).emit("room_state_update", roomState);
+          broadcastSanitizedRoomState(io, roomState);
         }
       });
 
@@ -380,7 +423,7 @@ const ioHandler = (
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
         roomState.registeredRoster = payload.roster;
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       socket.on("admin_control_timer", (payload: { action: "start" | "pause" | "reset" | "switch_turn"; activeTeam?: TeamId; activePlayerId?: string; turnSeconds?: number; warningSeconds?: number; team1Time?: number; team2Time?: number }) => {
@@ -424,7 +467,7 @@ const ioHandler = (
           roomState.team2TotalTime = payload.team2Time;
         }
 
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Admin update player / spectator
@@ -467,7 +510,7 @@ const ioHandler = (
         }
 
         updateSpectatorCount(roomState);
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Kick User (Player or Spectator)
@@ -481,7 +524,7 @@ const ioHandler = (
           updateSpectatorCount(roomState);
 
           roomState.chatMessages.push({
-            id: `sys-kick-${Date.now()}`,
+            id: `sys-kick-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -492,7 +535,7 @@ const ioHandler = (
           });
 
           io.to(currentRoomId).emit("user_kicked_event", { targetUsername: target });
-          io.to(currentRoomId).emit("room_state_update", roomState);
+          broadcastSanitizedRoomState(io, roomState);
         }
       });
 
@@ -512,7 +555,7 @@ const ioHandler = (
           updateSpectatorCount(roomState);
 
           roomState.chatMessages.push({
-            id: `sys-ban-${Date.now()}`,
+            id: `sys-ban-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -523,7 +566,7 @@ const ioHandler = (
           });
 
           io.to(currentRoomId).emit("user_banned_event", { targetUsername: target });
-          io.to(currentRoomId).emit("room_state_update", roomState);
+          broadcastSanitizedRoomState(io, roomState);
         }
       });
 
@@ -537,7 +580,7 @@ const ioHandler = (
           roomState.bannedUsernames = roomState.bannedUsernames.filter(u => u !== target);
 
           roomState.chatMessages.push({
-            id: `sys-unban-${Date.now()}`,
+            id: `sys-unban-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
@@ -548,7 +591,7 @@ const ioHandler = (
           });
 
           io.to(currentRoomId).emit("player_toast_event", { message: `✅ @${target} was unbanned by admin.` });
-          io.to(currentRoomId).emit("room_state_update", roomState);
+          broadcastSanitizedRoomState(io, roomState);
         }
       });
 
@@ -584,7 +627,7 @@ const ioHandler = (
           message: `📢 ${teamLabel} total time updated to ${formattedTime}. Remaining time has been equally redistributed among active speakers.`
         });
 
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
       });
 
       // Update individual player time share (Only player themselves can adjust)
@@ -606,7 +649,71 @@ const ioHandler = (
         const seconds = Math.max(5, Math.min(1800, payload.newTimeSeconds));
         player.timeLimitSeconds = seconds;
         player.remainingSeconds = seconds;
-        io.to(currentRoomId).emit("room_state_update", roomState);
+        broadcastSanitizedRoomState(io, roomState);
+      });
+
+      // WebRTC Peer Signaling Relay
+      socket.on("webrtc_offer", (data: { targetUsername: string; offer: any; senderUsername: string }) => {
+        if (!currentRoomId) return;
+        const target = (data.targetUsername || "").toLowerCase();
+        const roomSockets = io.sockets.adapter.rooms.get(currentRoomId);
+        if (!roomSockets) return;
+
+        for (const socketId of roomSockets) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s && (s as any).currentUsername === target) {
+            s.emit("webrtc_offer", { offer: data.offer, senderUsername: data.senderUsername });
+            break;
+          }
+        }
+      });
+
+      socket.on("webrtc_answer", (data: { targetUsername: string; answer: any; senderUsername: string }) => {
+        if (!currentRoomId) return;
+        const target = (data.targetUsername || "").toLowerCase();
+        const roomSockets = io.sockets.adapter.rooms.get(currentRoomId);
+        if (!roomSockets) return;
+
+        for (const socketId of roomSockets) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s && (s as any).currentUsername === target) {
+            s.emit("webrtc_answer", { answer: data.answer, senderUsername: data.senderUsername });
+            break;
+          }
+        }
+      });
+
+      socket.on("webrtc_ice_candidate", (data: { targetUsername: string; candidate: any; senderUsername: string }) => {
+        if (!currentRoomId) return;
+        const target = (data.targetUsername || "").toLowerCase();
+        const roomSockets = io.sockets.adapter.rooms.get(currentRoomId);
+        if (!roomSockets) return;
+
+        for (const socketId of roomSockets) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s && (s as any).currentUsername === target) {
+            s.emit("webrtc_ice_candidate", { candidate: data.candidate, senderUsername: data.senderUsername });
+            break;
+          }
+        }
+      });
+
+      socket.on("webrtc_request_stream", (data: { targetUsername: string; senderUsername: string }) => {
+        if (!currentRoomId) return;
+        const target = (data.targetUsername || "").toLowerCase();
+        if (target === "all") {
+          socket.to(currentRoomId).emit("webrtc_request_stream", { senderUsername: data.senderUsername });
+        } else {
+          const roomSockets = io.sockets.adapter.rooms.get(currentRoomId);
+          if (!roomSockets) return;
+          for (const socketId of roomSockets) {
+            const s = io.sockets.sockets.get(socketId);
+            if (s && (s as any).currentUsername === target) {
+              s.emit("webrtc_request_stream", { senderUsername: data.senderUsername });
+              break;
+            }
+          }
+        }
       });
 
       // Admin End Session & Destroy Lobby
@@ -641,7 +748,7 @@ const ioHandler = (
               });
             }
 
-            io.to(currentRoomId).emit("room_state_update", roomState);
+            broadcastSanitizedRoomState(io, roomState);
           }
         }
       });

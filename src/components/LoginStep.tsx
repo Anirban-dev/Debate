@@ -167,48 +167,11 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               </button>
             </div>
 
-            {/* OAuth Redirect Info Toggle */}
-            <div className="pt-2 flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRedirectInfo(!showRedirectInfo)}
-                className="text-xs text-slate-400 hover:text-blue-400 underline flex items-center gap-1 transition"
-              >
-                <Info className="w-3.5 h-3.5 text-blue-400" />
-                <span>NextAuth Google Redirect URI Details</span>
-              </button>
-
-              {showRedirectInfo && (
-                <div className="w-full bg-slate-950/90 border border-slate-800 p-3.5 rounded-2xl text-[11px] text-slate-300 space-y-2 mt-1">
-                  <p className="font-semibold text-blue-400">Google Cloud Console Authorized Redirect URI:</p>
-                  <p className="text-slate-400 leading-relaxed">
-                    Register this exact URI under <strong>Authorized redirect URIs</strong> in your Google Cloud Console OAuth 2.0 credentials:
-                  </p>
-                  
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between bg-slate-900 border border-amber-500/50 rounded-lg p-2 font-mono text-[10px] text-amber-300 overflow-x-auto">
-                      <span className="truncate mr-2 font-bold">{nextAuthCallbackUrl}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(nextAuthCallbackUrl)}
-                        className="text-slate-400 hover:text-white shrink-0 p-1 bg-slate-800 rounded"
-                      >
-                        {copiedUrl === nextAuthCallbackUrl ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800">
-                    NextAuth automatically uses <code className="text-blue-300">/api/auth/callback/google</code> for callback routing.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-1 text-center text-[11px] text-slate-500 space-y-1">
+            {/* Encrypted Session Footer */}
+            <div className="pt-1 text-center text-[11px] text-slate-500">
               <p className="flex items-center justify-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                Encrypted Session Tokens &bull; NextAuth v5
+                Authenticated Session
               </p>
             </div>
           </>

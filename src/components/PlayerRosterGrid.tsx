@@ -5,6 +5,8 @@ import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock, UserX, Ban, Edit2
 interface PlayerRosterGridProps {
   roomState: MatchRoomState;
   currentUser: Player | null;
+  localStream?: MediaStream | null;
+  remoteStreams?: Record<string, MediaStream>;
   onToggleMedia: (mediaType: 'mic' | 'video', value: boolean) => void;
   onAdminUpdatePlayer?: (targetUsername: string, updates: Partial<Player>) => void;
   onAdminKickUser?: (targetUsername: string) => void;
@@ -14,40 +16,64 @@ interface PlayerRosterGridProps {
   onShowNotice?: (title: string, message: string) => void;
 }
 
-// Sub-component for rendering individual player webcam video preview
-const LocalWebcamPreview: React.FC<{ isVideoOff: boolean }> = ({ isVideoOff }) => {
+// Sub-component for rendering individual player stream (local or remote WebRTC)
+const PlayerStreamBox: React.FC<{
+  player: Player;
+  isSelf: boolean;
+  localStream?: MediaStream | null;
+  remoteStream?: MediaStream | null;
+}> = ({ player, isSelf, localStream, remoteStream }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stream = isSelf ? localStream : remoteStream;
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    if (!isVideoOff) {
-      navigator.mediaDevices?.getUserMedia({ video: true })
-        .then((s) => {
-          stream = s;
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        })
-        .catch(() => {});
+    if (videoRef.current && stream && !player.isVideoOff) {
+      videoRef.current.srcObject = stream;
     }
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
-    };
-  }, [isVideoOff]);
+  }, [stream, player.isVideoOff]);
 
-  if (isVideoOff) return null;
+  useEffect(() => {
+    if (audioRef.current && remoteStream && !isSelf) {
+      audioRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream, isSelf]);
 
   return (
-    <div className="w-12 h-12 rounded-xl overflow-hidden bg-black shrink-0 border border-blue-500 shadow-md">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="w-full h-full object-cover transform -scale-x-100"
-      />
+    <div className="relative shrink-0">
+      {/* Remote Audio player for player voice stream */}
+      {!isSelf && remoteStream && (
+        <audio
+          ref={audioRef}
+          autoPlay
+          muted={player.isMuted}
+          className="hidden"
+        />
+      )}
+
+      {!player.isVideoOff && stream ? (
+        <div className="w-12 h-12 rounded-xl bg-slate-950 border border-blue-500/80 overflow-hidden shadow">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={isSelf}
+            className={`w-full h-full object-cover ${isSelf ? 'transform -scale-x-100' : ''}`}
+          />
+        </div>
+      ) : (
+        <div className="relative shrink-0">
+          <img
+            src={player.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${player.username}`}
+            alt={player.username}
+            className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+          />
+          <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900 ${
+            player.isOnline ? 'bg-emerald-500' : 'bg-slate-500'
+          }`}></span>
+        </div>
+      )}
     </div>
   );
 };
@@ -143,30 +169,13 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-2 mt-1">
           {/* Avatar / Camera Preview & Player Meta */}
           <div className="flex items-center gap-2.5 min-w-0">
-            {/* Local Webcam Preview or Remote Video Avatar */}
-            {isSelf && !player.isVideoOff ? (
-              <LocalWebcamPreview isVideoOff={player.isVideoOff} />
-            ) : !player.isVideoOff ? (
-              <div className="relative shrink-0 w-12 h-12 rounded-xl bg-slate-950 border border-blue-500/80 flex items-center justify-center overflow-hidden">
-                <img
-                  src={player.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${player.username}`}
-                  alt={player.username}
-                  className="w-full h-full object-cover opacity-90"
-                />
-                <span className="absolute bottom-0 right-0 p-1 bg-blue-600 text-white rounded-tl-md text-[8px] font-bold">
-                  CAM
-                </span>
-              </div>
-            ) : (
-              <div className="relative shrink-0">
-                <img
-                  src={player.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${player.username}`}
-                  alt={player.username}
-                  className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
-                />
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900 bg-emerald-500"></span>
-              </div>
-            )}
+            {/* Real WebRTC Player Video and Voice Stream Box */}
+            <PlayerStreamBox
+              player={player}
+              isSelf={isSelf}
+              localStream={localStream}
+              remoteStream={remoteStreams ? remoteStreams[player.username.toLowerCase()] : null}
+            />
 
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">

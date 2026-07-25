@@ -46,7 +46,7 @@ export const SpectatorLounge: React.FC<SpectatorLoungeProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Spectators enjoy live stream viewing without mic or camera requirements.
+              Active match spectators in lounge.
             </p>
           </div>
         </div>
@@ -60,22 +60,6 @@ export const SpectatorLounge: React.FC<SpectatorLoungeProps> = ({
             <LogOut className="w-4 h-4" /> Leave Match Arena
           </button>
         )}
-      </div>
-
-      {/* Info Notice Banner */}
-      <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl flex items-start gap-3 text-xs text-slate-300">
-        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold text-slate-200">Spectator Permission Model:</p>
-          <p className="text-slate-400 leading-relaxed">
-            Spectators can watch live speakers, view global chat, and interact without audio/video device access. Admin can promote spectators to team players or kick/ban non-compliant viewers.
-          </p>
-          {isPersonalLobby && (
-            <p className="text-amber-400/90 text-[11px] font-mono font-medium pt-1">
-              * Note: In Personal Lobbies, global admin controls are non-intrusive and managed within the lobby.
-            </p>
-          )}
-        </div>
       </div>
 
       {/* Spectator List Grid */}

@@ -14,6 +14,7 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
 import { RoastNotification, ToastItem } from '@/components/RoastNotification';
 import { PopupModal, ModalData } from '@/components/PopupModal';
+import { useWebRTC } from '@/lib/useWebRTC';
 import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
 export default function Home() {
@@ -29,6 +30,9 @@ export default function Home() {
   const [roomState, setRoomState] = useState<MatchRoomState | null>(null);
   const [currentUser, setCurrentUser] = useState<Player | null>(null);
   const [currentRoomId, setCurrentRoomId] = useState<string>('');
+
+  // WebRTC Peer Connection & Stream Manager
+  const { localStream, remoteStreams } = useWebRTC(socket, roomState, currentUser);
 
   const currentUserRef = React.useRef<Player | null>(null);
   useEffect(() => {
@@ -66,8 +70,8 @@ export default function Home() {
     }, 4500);
   };
 
-  // View navigation tab in match lobby: 'stage' | 'spectators' | 'notes' | 'chat' | 'all'
-  const [activeViewTab, setActiveViewTab] = useState<'stage' | 'spectators' | 'notes' | 'chat' | 'all'>('stage');
+  // View navigation tab in match lobby: 'stage' | 'spectators' | 'notes' | 'chat'
+  const [activeViewTab, setActiveViewTab] = useState<'stage' | 'spectators' | 'notes' | 'chat'>('stage');
 
   // Check active session on mount
   useEffect(() => {
@@ -423,26 +427,6 @@ export default function Home() {
                 <MessageSquare className="w-4 h-4" />
                 <span>Match Chat</span>
               </button>
-
-              <button
-                onClick={() => setActiveViewTab('all')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeViewTab === 'all'
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span className="hidden sm:inline">All-in-One Dashboard</span>
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-400 font-medium hidden md:block">
-              {currentUser?.role === 'spectator' ? (
-                <span className="text-amber-400">Spectator Mode: View live stage & global chat</span>
-              ) : (
-                <span>Click <span className="text-blue-400 font-semibold">Video</span> button in roster to turn webcam feed ON/OFF</span>
-              )}
             </div>
           </div>
         </div>
@@ -458,6 +442,8 @@ export default function Home() {
                 <ActiveSpeakerStage
                   roomState={roomState}
                   currentUser={currentUser}
+                  localStream={localStream}
+                  remoteStreams={remoteStreams}
                   onToggleMedia={handleToggleMedia}
                   onControlTimer={handleControlTimer}
                 />
@@ -467,6 +453,8 @@ export default function Home() {
                 <PlayerRosterGrid
                   roomState={roomState}
                   currentUser={currentUser}
+                  localStream={localStream}
+                  remoteStreams={remoteStreams}
                   onToggleMedia={handleToggleMedia}
                   onAdminUpdatePlayer={handleAdminUpdatePlayer}
                   onAdminKickUser={handleAdminKickUser}
@@ -512,46 +500,6 @@ export default function Home() {
                 currentUser={currentUser}
                 onSendChat={handleSendChat}
               />
-            </div>
-          )}
-
-          {/* VIEW 5: ALL-IN-ONE DASHBOARD */}
-          {activeViewTab === 'all' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-4 space-y-6">
-                <PlayerRosterGrid
-                  roomState={roomState}
-                  currentUser={currentUser}
-                  onToggleMedia={handleToggleMedia}
-                  onAdminUpdatePlayer={handleAdminUpdatePlayer}
-                  onAdminKickUser={handleAdminKickUser}
-                  onAdminBanUser={handleAdminBanUser}
-                  onShowNotice={(title, msg) => showModal(title, msg, 'warning')}
-                />
-              </div>
-
-              <div className="lg:col-span-5 space-y-6">
-                <ActiveSpeakerStage
-                  roomState={roomState}
-                  currentUser={currentUser}
-                  onToggleMedia={handleToggleMedia}
-                />
-
-                <SharedNotesPad
-                  roomState={roomState}
-                  currentUser={currentUser}
-                  onUpdateTeamNotes={handleUpdateTeamNotes}
-                />
-              </div>
-
-              <div className="lg:col-span-3 space-y-6">
-                <ChatPanel
-                  roomState={roomState}
-                  currentUser={currentUser}
-                  onSendChat={handleSendChat}
-                  onShowNotice={(title, msg) => showModal(title, msg, 'warning')}
-                />
-              </div>
             </div>
           )}
         </main>
