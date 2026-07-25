@@ -23,7 +23,13 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
 }) => {
   const timer = roomState?.timer;
   const isMatchRunning = roomState?.status === 'running' || roomState?.status === 'paused';
-  const activePlayer = (isMatchRunning && timer?.activePlayerId) ? roomState.players[timer.activePlayerId] : null;
+  
+  // Always determine activePlayer (whether match is running, paused, or pre-match lobby)
+  const activePlayer = (timer?.activePlayerId && roomState.players[timer.activePlayerId])
+    ? roomState.players[timer.activePlayerId]
+    : (roomState.registeredRoster?.[0] && roomState.players[roomState.registeredRoster[0].username]
+        ? roomState.players[roomState.registeredRoster[0].username]
+        : (Object.values(roomState.players).find(p => p.role === 'player') || null));
 
   const stageVideoRef = useRef<HTMLVideoElement | null>(null);
   const stageAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -33,15 +39,21 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
 
   useEffect(() => {
     if (stageVideoRef.current && activeStream && activePlayer && !activePlayer.isVideoOff) {
-      stageVideoRef.current.srcObject = activeStream;
+      if (stageVideoRef.current.srcObject !== activeStream) {
+        stageVideoRef.current.srcObject = activeStream;
+      }
+      stageVideoRef.current.play().catch(() => {});
     }
-  }, [activeStream, activePlayer?.isVideoOff, activePlayer]);
+  }, [activeStream, activePlayer?.isVideoOff, activePlayer?.username, activePlayer]);
 
   useEffect(() => {
     if (stageAudioRef.current && activeStream && !isSelfActive) {
-      stageAudioRef.current.srcObject = activeStream;
+      if (stageAudioRef.current.srcObject !== activeStream) {
+        stageAudioRef.current.srcObject = activeStream;
+      }
+      stageAudioRef.current.play().catch(() => {});
     }
-  }, [activeStream, isSelfActive]);
+  }, [activeStream, isSelfActive, activePlayer?.username]);
 
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3 relative overflow-hidden">
@@ -153,9 +165,14 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
                 @{activePlayer.username}
               </span>
 
-              {!activePlayer.isMuted ? (
+              {!timer.isRunning ? (
+                <span className="px-2.5 py-1 bg-amber-950/90 border border-amber-500/80 text-amber-300 rounded-lg text-xs font-bold backdrop-blur-md flex items-center gap-1.5 shadow">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  ⏸️ Not Speaking (Standby)
+                </span>
+              ) : !activePlayer.isMuted ? (
                 <span className="px-2.5 py-1 bg-emerald-950/80 border border-emerald-600/80 text-emerald-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
-                  <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Speaking
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Speaking Live
                 </span>
               ) : (
                 <span className="px-2.5 py-1 bg-red-950/80 border border-red-600/80 text-red-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
