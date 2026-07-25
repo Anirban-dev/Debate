@@ -324,7 +324,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
                     className="p-1.5 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-lg transition"
                     title="Ban Player from Lobby"
                   >
-                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <Ban className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
