@@ -12,10 +12,12 @@ export interface WebRTCState {
 
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19020' },
-    { urls: 'stun:stun1.l.google.com:19020' },
-    { urls: 'stun:stun2.l.google.com:19020' },
-    { urls: 'stun:stun3.l.google.com:19020' },
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
   ],
 };
 
@@ -107,17 +109,33 @@ export function useWebRTC(
 
         setLocalStream(stream);
 
-        // Attach local tracks to any existing peer connections
-        Object.values(peerConnections.current).forEach((pc) => {
+        // Attach local tracks to any existing peer connections and trigger re-offers
+        Object.entries(peerConnections.current).forEach(async ([remoteUser, pc]) => {
           stream!.getTracks().forEach((track) => {
             const senders = pc.getSenders();
-            const exists = senders.some((s) => s.track === track);
-            if (!exists) {
+            const existingSender = senders.find((s) => s.track?.kind === track.kind);
+            if (existingSender) {
+              existingSender.replaceTrack(track).catch(() => {});
+            } else {
               try {
                 pc.addTrack(track, stream!);
               } catch (_) {}
             }
           });
+
+          if (socket && currentUserRef.current) {
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('webrtc_offer', {
+                targetUsername: remoteUser,
+                offer,
+                senderUsername: currentUserRef.current.username,
+              });
+            } catch (err) {
+              console.warn('Re-offer error:', err);
+            }
+          }
         });
       }
     }
@@ -127,7 +145,7 @@ export function useWebRTC(
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.username, currentUser?.role]);
+  }, [currentUser?.username, currentUser?.role, socket]);
 
   // Dynamic mute / video off updates on local tracks
   useEffect(() => {
@@ -150,10 +168,24 @@ export function useWebRTC(
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnections.current[targetKey] = pc;
 
+    // Add audio & video transceivers to ensure bidirectional media capabilities
+    try {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (_) {}
+
     // Attach local stream tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
+        const senders = pc.getSenders();
+        const existingSender = senders.find((s) => s.track?.kind === track.kind);
+        if (existingSender) {
+          existingSender.replaceTrack(track).catch(() => {});
+        } else {
+          try {
+            pc.addTrack(track, localStreamRef.current!);
+          } catch (_) {}
+        }
       });
     }
 
@@ -163,6 +195,12 @@ export function useWebRTC(
         setRemoteStreams((prev) => ({
           ...prev,
           [targetKey]: event.streams[0],
+        }));
+      } else if (event.track) {
+        const newStream = new MediaStream([event.track]);
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [targetKey]: newStream,
         }));
       }
     };

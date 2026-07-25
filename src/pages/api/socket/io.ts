@@ -682,9 +682,8 @@ const ioHandler = (
 
         for (const socketId of roomSockets) {
           const s = io.sockets.sockets.get(socketId);
-          if (s && (s as any).currentUsername === target) {
+          if (s && ((s as any).currentUsername || "").toLowerCase() === target) {
             s.emit("webrtc_offer", { offer: data.offer, senderUsername: data.senderUsername });
-            break;
           }
         }
       });
@@ -697,9 +696,8 @@ const ioHandler = (
 
         for (const socketId of roomSockets) {
           const s = io.sockets.sockets.get(socketId);
-          if (s && (s as any).currentUsername === target) {
+          if (s && ((s as any).currentUsername || "").toLowerCase() === target) {
             s.emit("webrtc_answer", { answer: data.answer, senderUsername: data.senderUsername });
-            break;
           }
         }
       });
@@ -712,9 +710,8 @@ const ioHandler = (
 
         for (const socketId of roomSockets) {
           const s = io.sockets.sockets.get(socketId);
-          if (s && (s as any).currentUsername === target) {
+          if (s && ((s as any).currentUsername || "").toLowerCase() === target) {
             s.emit("webrtc_ice_candidate", { candidate: data.candidate, senderUsername: data.senderUsername });
-            break;
           }
         }
       });
@@ -729,9 +726,8 @@ const ioHandler = (
           if (!roomSockets) return;
           for (const socketId of roomSockets) {
             const s = io.sockets.sockets.get(socketId);
-            if (s && (s as any).currentUsername === target) {
+            if (s && ((s as any).currentUsername || "").toLowerCase() === target) {
               s.emit("webrtc_request_stream", { senderUsername: data.senderUsername });
-              break;
             }
           }
         }

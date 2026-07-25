@@ -14,6 +14,7 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
 import { RoastNotification, ToastItem } from '@/components/RoastNotification';
 import { PopupModal, ModalData } from '@/components/PopupModal';
+import { FloatingAdminWidget } from '@/components/FloatingAdminWidget';
 import { useWebRTC } from '@/lib/useWebRTC';
 import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
@@ -536,6 +537,18 @@ export default function Home() {
         data={modalData}
         onClose={() => setModalData(null)}
       />
+
+      {/* Persistent Bottom-Left Floating Admin Broadcast Widget & Controls */}
+      {roomState && (
+        <FloatingAdminWidget
+          roomState={roomState}
+          currentUser={currentUser}
+          localStream={localStream}
+          remoteStreams={remoteStreams}
+          onToggleMedia={handleToggleMedia}
+          onAdminUpdatePlayer={handleAdminUpdatePlayer}
+        />
+      )}
     </div>
   );
 }
