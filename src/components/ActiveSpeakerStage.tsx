@@ -12,6 +12,70 @@ interface ActiveSpeakerStageProps {
   onAdminUpdatePlayer?: (targetUsername: string, updates: Partial<Player>) => void;
 }
 
+// Bulletproof Helper Component for Video Stream Playback
+export const MediaVideoElement: React.FC<{
+  stream: MediaStream | null | undefined;
+  isSelf?: boolean;
+  className?: string;
+}> = ({ stream, isSelf, className = "w-full h-full object-cover" }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('MediaVideoElement play error:', err);
+      });
+    }
+  }, [stream]);
+
+  if (!stream) return null;
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted={isSelf}
+      className={`${className} ${isSelf ? 'transform -scale-x-100' : ''}`}
+    />
+  );
+};
+
+// Bulletproof Helper Component for Remote Audio Stream Playback
+export const RemoteAudioElement: React.FC<{
+  stream: MediaStream | null | undefined;
+  isMuted?: boolean;
+}> = ({ stream, isMuted }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !stream) return;
+
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
+
+    audio.muted = !!isMuted;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {});
+    }
+  }, [stream, isMuted]);
+
+  if (!stream) return null;
+
+  return <audio ref={audioRef} autoPlay muted={isMuted} className="hidden" />;
+};
+
 // Dedicated Separate Area for Room Admin / Moderator Broadcast & Direct Controls
 const AdminStageBox: React.FC<{
   roomState: MatchRoomState;
@@ -25,29 +89,8 @@ const AdminStageBox: React.FC<{
     (p) => p.role === 'admin' || p.username.toLowerCase() === (roomState.adminUsername || '').toLowerCase()
   ) || null;
 
-  const adminVideoRef = useRef<HTMLVideoElement | null>(null);
-  const adminAudioRef = useRef<HTMLAudioElement | null>(null);
-
   const isAdminSelf = !!(currentUser && adminPlayer && currentUser.username.toLowerCase() === adminPlayer.username.toLowerCase());
   const adminStream = isAdminSelf ? localStream : (adminPlayer ? remoteStreams[adminPlayer.username.toLowerCase()] : null);
-
-  useEffect(() => {
-    if (adminVideoRef.current && adminStream && adminPlayer && !adminPlayer.isVideoOff) {
-      if (adminVideoRef.current.srcObject !== adminStream) {
-        adminVideoRef.current.srcObject = adminStream;
-      }
-      adminVideoRef.current.play().catch(() => {});
-    }
-  }, [adminStream, adminPlayer?.isVideoOff, adminPlayer?.username, adminPlayer]);
-
-  useEffect(() => {
-    if (adminAudioRef.current && adminStream && !isAdminSelf) {
-      if (adminAudioRef.current.srcObject !== adminStream) {
-        adminAudioRef.current.srcObject = adminStream;
-      }
-      adminAudioRef.current.play().catch(() => {});
-    }
-  }, [adminStream, isAdminSelf, adminPlayer?.username]);
 
   if (!adminPlayer) return null;
 
@@ -105,22 +148,11 @@ const AdminStageBox: React.FC<{
         <div className="sm:col-span-5 relative aspect-video bg-slate-950 rounded-xl border border-purple-900/60 overflow-hidden flex items-center justify-center shadow-inner">
           {/* Remote audio listener for spectators & non-admin participants */}
           {!isAdminSelf && adminStream && (
-            <audio
-              ref={adminAudioRef}
-              autoPlay
-              muted={adminPlayer.isMuted}
-              className="hidden"
-            />
+            <RemoteAudioElement stream={adminStream} isMuted={adminPlayer.isMuted} />
           )}
 
           {!adminPlayer.isVideoOff && adminStream ? (
-            <video
-              ref={adminVideoRef}
-              autoPlay
-              playsInline
-              muted={isAdminSelf}
-              className={`w-full h-full object-cover rounded-xl ${isAdminSelf ? 'transform -scale-x-100' : ''}`}
-            />
+            <MediaVideoElement stream={adminStream} isSelf={isAdminSelf} className="w-full h-full object-cover rounded-xl" />
           ) : (
             <div className="flex items-center gap-3 p-3">
               <div className="relative">
@@ -143,7 +175,7 @@ const AdminStageBox: React.FC<{
                   Match Host / Admin
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  {adminPlayer.isVideoOff ? '📹 Camera Off' : '📹 Camera On'} &bull; {adminPlayer.isMuted ? '🎙️ Muted' : '🎙️ Mic Active'}
+                  {adminPlayer.isVideoOff ? '📹 Camera Off' : (adminStream ? '📹 Camera Live' : '📹 Initializing Feed...')} &bull; {adminPlayer.isMuted ? '🎙️ Muted' : '🎙️ Mic Active'}
                 </span>
               </div>
             </div>
@@ -346,23 +378,12 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
             <>
               {/* Hidden audio element for remote active speaker voice audio */}
               {!isSelfActive && activeStream && (
-                <audio
-                  ref={stageAudioRef}
-                  autoPlay
-                  muted={activePlayer.isMuted}
-                  className="hidden"
-                />
+                <RemoteAudioElement stream={activeStream} isMuted={activePlayer.isMuted} />
               )}
 
               {/* Real Camera Stream if active speaker has camera ON */}
               {!activePlayer.isVideoOff && activeStream ? (
-                <video
-                  ref={stageVideoRef}
-                  autoPlay
-                  playsInline
-                  muted={isSelfActive}
-                  className={`w-full h-full object-cover rounded-xl ${isSelfActive ? 'transform -scale-x-100' : ''}`}
-                />
+                <MediaVideoElement stream={activeStream} isSelf={isSelfActive} className="w-full h-full object-cover rounded-xl" />
               ) : (
                 /* Avatar Placeholder if camera is OFF or stream connecting */
                 <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
@@ -393,7 +414,7 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      📹 Camera Off &bull; 🎙️ Voice Stream Active
+                      {activePlayer.isVideoOff ? '📹 Camera Off' : (activeStream ? '📹 Camera Live' : '📹 Initializing Feed...')} &bull; {activePlayer.isMuted ? '🎙️ Muted' : '🎙️ Voice Active'}
                     </p>
                   </div>
                 </div>

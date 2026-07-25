@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MatchRoomState, Player, TeamId } from '../types';
 import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock, UserX, Ban, Edit2, Check, X, ArrowRightLeft } from 'lucide-react';
+import { MediaVideoElement, RemoteAudioElement } from './ActiveSpeakerStage';
 
 interface PlayerRosterGridProps {
   roomState: MatchRoomState;
@@ -23,44 +24,18 @@ const PlayerStreamBox: React.FC<{
   localStream?: MediaStream | null;
   remoteStream?: MediaStream | null;
 }> = ({ player, isSelf, localStream, remoteStream }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const stream = isSelf ? localStream : remoteStream;
-
-  useEffect(() => {
-    if (videoRef.current && stream && !player.isVideoOff) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream, player.isVideoOff]);
-
-  useEffect(() => {
-    if (audioRef.current && remoteStream && !isSelf) {
-      audioRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream, isSelf]);
 
   return (
     <div className="relative shrink-0">
       {/* Remote Audio player for player voice stream */}
       {!isSelf && remoteStream && (
-        <audio
-          ref={audioRef}
-          autoPlay
-          muted={player.isMuted}
-          className="hidden"
-        />
+        <RemoteAudioElement stream={remoteStream} isMuted={player.isMuted} />
       )}
 
       {!player.isVideoOff && stream ? (
         <div className="w-12 h-12 rounded-xl bg-slate-950 border border-blue-500/80 overflow-hidden shadow">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={isSelf}
-            className={`w-full h-full object-cover ${isSelf ? 'transform -scale-x-100' : ''}`}
-          />
+          <MediaVideoElement stream={stream} isSelf={isSelf} className="w-full h-full object-cover" />
         </div>
       ) : (
         <div className="relative shrink-0">

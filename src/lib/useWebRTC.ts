@@ -39,7 +39,10 @@ export function useWebRTC(
 
   // 1. Initialize Local Media Stream (Camera & Microphone)
   useEffect(() => {
-    if (!currentUser || currentUser.role === 'spectator') {
+    const targetUsername = currentUser?.username;
+    const targetRole = currentUser?.role;
+
+    if (!targetUsername || targetRole === 'spectator') {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
         localStreamRef.current = null;
@@ -51,19 +54,46 @@ export function useWebRTC(
     let isMounted = true;
 
     async function initLocalStream() {
-      try {
-        if (localStreamRef.current) return;
+      if (localStreamRef.current) return;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
+      let stream: MediaStream | null = null;
+
+      // Try 1: High quality video & audio
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { max: 30 } },
           audio: { echoCancellation: true, noiseSuppression: true },
         });
-
-        if (!isMounted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
+      } catch (err1) {
+        console.warn('Standard HD getUserMedia failed, trying fallback constraints:', err1);
+        // Try 2: Basic video & audio
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (err2) {
+          console.warn('Basic video & audio failed, trying video only:', err2);
+          // Try 3: Video only
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          } catch (err3) {
+            console.warn('Video only failed, trying audio only:', err3);
+            // Try 4: Audio only
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (err4) {
+              console.error('All getUserMedia attempts failed:', err4);
+            }
+          }
         }
+      }
 
+      if (!isMounted) {
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+        }
+        return;
+      }
+
+      if (stream) {
         localStreamRef.current = stream;
 
         // Apply current mute / video off settings
@@ -76,8 +106,19 @@ export function useWebRTC(
         }
 
         setLocalStream(stream);
-      } catch (err) {
-        console.warn('Local getUserMedia Notice:', err);
+
+        // Attach local tracks to any existing peer connections
+        Object.values(peerConnections.current).forEach((pc) => {
+          stream!.getTracks().forEach((track) => {
+            const senders = pc.getSenders();
+            const exists = senders.some((s) => s.track === track);
+            if (!exists) {
+              try {
+                pc.addTrack(track, stream!);
+              } catch (_) {}
+            }
+          });
+        });
       }
     }
 
@@ -86,7 +127,7 @@ export function useWebRTC(
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.username, currentUser?.role, currentUser]);
+  }, [currentUser?.username, currentUser?.role]);
 
   // Dynamic mute / video off updates on local tracks
   useEffect(() => {
@@ -271,7 +312,8 @@ export function useWebRTC(
       socket.off('webrtc_ice_candidate', handleCandidate);
       socket.off('webrtc_request_stream', handleRequestStream);
     };
-  }, [socket, currentUser?.username, currentUser, getOrCreatePeerConnection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, currentUser?.username, getOrCreatePeerConnection]);
 
   // Clean up peer connections on unmount
   useEffect(() => {
