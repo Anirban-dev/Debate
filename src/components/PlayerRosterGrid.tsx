@@ -303,43 +303,9 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
               </div>
             )}
 
-            {/* Direct Admin Controls Directly on Player Tile */}
-            {isAdmin && onAdminUpdatePlayer && (
+            {/* Direct Admin Controls Directly on Player Tile (In Lobby: Admin only has Kick & Ban permissions) */}
+            {isAdmin && (
               <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-800">
-                {/* Admin Mute Toggle */}
-                <button
-                  onClick={() => onAdminUpdatePlayer(player.username, { isMutedByAdmin: !player.isMutedByAdmin })}
-                  className={`p-1.5 rounded-lg transition ${
-                    player.isMutedByAdmin ? 'bg-purple-600 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                  title={player.isMutedByAdmin ? 'Unmute Player (Admin)' : 'Mute Player (Admin)'}
-                >
-                  <Shield className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Admin Disable Camera Toggle */}
-                <button
-                  onClick={() => onAdminUpdatePlayer(player.username, { isVideoOffByAdmin: !player.isVideoOffByAdmin })}
-                  className={`p-1.5 rounded-lg transition ${
-                    player.isVideoOffByAdmin ? 'bg-amber-600 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                  title={player.isVideoOffByAdmin ? 'Enable Player Camera (Admin)' : 'Disable Player Camera (Admin)'}
-                >
-                  <VideoOff className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Switch Team Button */}
-                <button
-                  onClick={() => {
-                    const nextTeam = player.team === 'team1' ? 'team2' : 'team1';
-                    onAdminUpdatePlayer(player.username, { team: nextTeam });
-                  }}
-                  className="p-1.5 bg-slate-800 hover:bg-blue-900 text-slate-400 hover:text-blue-200 rounded-lg transition"
-                  title={`Move Player to ${player.team === 'team1' ? 'Team 2' : 'Team 1'}`}
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                </button>
-
                 {/* Kick Player */}
                 {onAdminKickUser && (
                   <button
@@ -358,7 +324,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
                     className="p-1.5 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-lg transition"
                     title="Ban Player from Lobby"
                   >
-                    <Ban className="w-3.5 h-3.5" />
+                    <ShieldAlert className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>

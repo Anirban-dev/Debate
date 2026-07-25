@@ -247,25 +247,6 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
                 </button>
               </div>
             </div>
-
-            {/* Active Speaker Selection */}
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-[11px]">Active Speaker:</span>
-              <select
-                value={timer.activePlayerId || ''}
-                onChange={(e) => onControlTimer('switch_turn', { activePlayerId: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded-md text-xs text-white px-2 py-1 focus:outline-none"
-              >
-                <option value="">-- None Selected --</option>
-                {(Object.values(roomState.players) as Player[])
-                  .filter(p => p.role === 'player')
-                  .map(p => (
-                    <option key={p.username} value={p.username}>
-                      @{p.username} ({p.team === 'team1' ? 'Team 1' : 'Team 2'})
-                    </option>
-                  ))}
-              </select>
-            </div>
           </div>
         </div>
       )}

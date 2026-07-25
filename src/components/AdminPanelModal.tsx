@@ -380,38 +380,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         title={isOnline ? "Personalized Turn Time (s)" : "Admin powers activate once user enters room"}
                       />
 
-                      {/* Force Mute */}
-                      <button
-                        disabled={!isOnline}
-                        onClick={() => isOnline && onAdminUpdatePlayer(item.username, { isMutedByAdmin: !player?.isMutedByAdmin })}
-                        className={`p-1.5 rounded transition ${
-                          !isOnline
-                            ? 'bg-slate-950 text-slate-700 border border-slate-800/80 cursor-not-allowed opacity-40'
-                            : player?.isMutedByAdmin
-                            ? 'bg-red-600 text-white'
-                            : 'bg-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                        title={isOnline ? "Force Admin Mute" : "Admin powers activate once user enters room"}
-                      >
-                        <VolumeX className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Force Video Off */}
-                      <button
-                        disabled={!isOnline}
-                        onClick={() => isOnline && onAdminUpdatePlayer(item.username, { isVideoOffByAdmin: !player?.isVideoOffByAdmin })}
-                        className={`p-1.5 rounded transition ${
-                          !isOnline
-                            ? 'bg-slate-950 text-slate-700 border border-slate-800/80 cursor-not-allowed opacity-40'
-                            : player?.isVideoOffByAdmin
-                            ? 'bg-red-600 text-white'
-                            : 'bg-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                        title={isOnline ? "Force Video Off" : "Admin powers activate once user enters room"}
-                      >
-                        <VideoOff className="w-3.5 h-3.5" />
-                      </button>
-
                       {/* Kick Player */}
                       <button
                         disabled={!isOnline}

@@ -7,8 +7,9 @@ interface ActiveSpeakerStageProps {
   currentUser: Player | null;
   localStream?: MediaStream | null;
   remoteStreams?: Record<string, MediaStream>;
-  onToggleMedia?: (mediaType: 'mic' | 'video', value: boolean) => void;
+  onToggleMedia?: (mediaType: 'mic' | 'value', value: boolean) => void;
   onControlTimer?: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
+  onAdminUpdatePlayer?: (targetUsername: string, updates: Partial<Player>) => void;
 }
 
 export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
@@ -17,7 +18,8 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   localStream = null,
   remoteStreams = {},
   onToggleMedia,
-  onControlTimer
+  onControlTimer,
+  onAdminUpdatePlayer
 }) => {
   const timer = roomState?.timer;
   const isMatchRunning = roomState?.status === 'running' || roomState?.status === 'paused';
@@ -82,124 +84,157 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
         </div>
       </div>
 
-      {/* Main Stage View Box or Pre-Match Turn Order List */}
-      {isMatchRunning ? (
-        <div className="relative aspect-video bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center group shadow-inner">
-          {activePlayer ? (
-            <>
-              {/* Hidden audio element for remote active speaker voice audio */}
-              {!isSelfActive && activeStream && (
-                <audio
-                  ref={stageAudioRef}
-                  autoPlay
-                  muted={activePlayer.isMuted}
-                  className="hidden"
-                />
-              )}
+      {/* Active Speaker Stage Spotlight Video Container */}
+      <div className="relative aspect-video bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center group shadow-inner">
+        {activePlayer ? (
+          <>
+            {/* Hidden audio element for remote active speaker voice audio */}
+            {!isSelfActive && activeStream && (
+              <audio
+                ref={stageAudioRef}
+                autoPlay
+                muted={activePlayer.isMuted}
+                className="hidden"
+              />
+            )}
 
-              {/* Real Camera Stream if active speaker has camera ON */}
-              {!activePlayer.isVideoOff && activeStream ? (
-                <video
-                  ref={stageVideoRef}
-                  autoPlay
-                  playsInline
-                  muted={isSelfActive}
-                  className={`w-full h-full object-cover rounded-xl ${isSelfActive ? 'transform -scale-x-100' : ''}`}
-                />
-              ) : (
-                /* Avatar Placeholder if camera is OFF or stream connecting */
-                <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
-                  <div className={`relative p-1 rounded-full border-2 ${
-                    activePlayer.team === 'team1' ? 'border-blue-500 shadow-lg shadow-blue-900/50' : 'border-red-500 shadow-lg shadow-red-900/50'
-                  }`}>
-                    <img
-                      src={activePlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${activePlayer.username}`}
-                      alt={activePlayer.username}
-                      className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-slate-800 object-cover"
-                    />
-                    {!activePlayer.isMuted && (
-                      <span className="absolute bottom-1 right-1 p-1.5 bg-emerald-500 text-slate-950 rounded-full shadow">
-                        <Radio className="w-4 h-4 animate-pulse" />
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="font-bold text-lg text-white font-mono">
-                        @{activePlayer.username}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                        activePlayer.team === 'team1' ? 'bg-blue-900 text-blue-200' : 'bg-red-900 text-red-200'
-                      }`}>
-                        {activePlayer.team === 'team1' ? 'Team 1' : 'Team 2'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      📹 Camera Off &bull; 🎙️ Voice Stream Active
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Stage Overlay Badges */}
-              <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase backdrop-blur-md shadow border ${
-                  activePlayer.team === 'team1'
-                    ? 'bg-blue-950/80 border-blue-600/80 text-blue-200'
-                    : 'bg-red-950/80 border-red-600/80 text-red-200'
+            {/* Real Camera Stream if active speaker has camera ON */}
+            {!activePlayer.isVideoOff && activeStream ? (
+              <video
+                ref={stageVideoRef}
+                autoPlay
+                playsInline
+                muted={isSelfActive}
+                className={`w-full h-full object-cover rounded-xl ${isSelfActive ? 'transform -scale-x-100' : ''}`}
+              />
+            ) : (
+              /* Avatar Placeholder if camera is OFF or stream connecting */
+              <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
+                <div className={`relative p-1 rounded-full border-2 ${
+                  activePlayer.team === 'team1' ? 'border-blue-500 shadow-lg shadow-blue-900/50' : 'border-red-500 shadow-lg shadow-red-900/50'
                 }`}>
-                  @{activePlayer.username}
-                </span>
+                  <img
+                    src={activePlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${activePlayer.username}`}
+                    alt={activePlayer.username}
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-800 object-cover"
+                  />
+                  {!activePlayer.isMuted && (
+                    <span className="absolute bottom-0 right-0 p-1 bg-emerald-500 text-slate-950 rounded-full shadow">
+                      <Radio className="w-3.5 h-3.5 animate-pulse" />
+                    </span>
+                  )}
+                </div>
 
-                {!activePlayer.isMuted ? (
-                  <span className="px-2.5 py-1 bg-emerald-950/80 border border-emerald-600/80 text-emerald-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Speaking
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-1 bg-red-950/80 border border-red-600/80 text-red-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
-                    <MicOff className="w-3.5 h-3.5" /> Muted
-                  </span>
-                )}
+                <div>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="font-bold text-base text-white font-mono">
+                      @{activePlayer.username}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      activePlayer.team === 'team1' ? 'bg-blue-900 text-blue-200' : 'bg-red-900 text-red-200'
+                    }`}>
+                      {activePlayer.team === 'team1' ? 'Team 1' : 'Team 2'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    📹 Camera Off &bull; 🎙️ Voice Stream Active
+                  </p>
+                </div>
               </div>
-            </>
-          ) : (
-            <div className="text-center p-6 space-y-2">
-              <Video className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="text-slate-400 text-xs">Stage Idle &bull; Waiting for active speaker turn</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Pre-match Lobby Stage: Scheduled Turn Order Sequence */
-        <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-            <div>
-              <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
-                <span>📋 Scheduled Speaking Order</span>
-                <span className="text-[10px] bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded font-mono">
-                  Alternating Order
-                </span>
-              </h4>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Match has not started yet. When started by Host Admin, speakers will take the stage in this order.
-              </p>
-            </div>
-          </div>
+            )}
 
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {roomState.registeredRoster && roomState.registeredRoster.length > 0 ? (
-              roomState.registeredRoster.map((player, idx) => (
+            {/* Stage Overlay Badges */}
+            <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase backdrop-blur-md shadow border ${
+                activePlayer.team === 'team1'
+                  ? 'bg-blue-950/80 border-blue-600/80 text-blue-200'
+                  : 'bg-red-950/80 border-red-600/80 text-red-200'
+              }`}>
+                @{activePlayer.username}
+              </span>
+
+              {!activePlayer.isMuted ? (
+                <span className="px-2.5 py-1 bg-emerald-950/80 border border-emerald-600/80 text-emerald-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Speaking
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 bg-red-950/80 border border-red-600/80 text-red-300 rounded-lg text-xs font-semibold backdrop-blur-md flex items-center gap-1">
+                  <MicOff className="w-3.5 h-3.5" /> Muted
+                </span>
+              )}
+            </div>
+
+            {/* Admin Speaker Stage Direct Control Permissions (Only allowed while player is on stage) */}
+            {currentUser?.role === 'admin' && onAdminUpdatePlayer && (
+              <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+                <button
+                  type="button"
+                  onClick={() => onAdminUpdatePlayer(activePlayer.username, { isMutedByAdmin: !activePlayer.isMutedByAdmin, isMuted: !activePlayer.isMutedByAdmin })}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 backdrop-blur-md border ${
+                    activePlayer.isMutedByAdmin || activePlayer.isMuted
+                      ? 'bg-red-900/90 text-white border-red-500 shadow'
+                      : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:bg-slate-800'
+                  }`}
+                  title={activePlayer.isMutedByAdmin ? "Unmute Active Speaker (Admin)" : "Mute Active Speaker (Admin)"}
+                >
+                  {activePlayer.isMutedByAdmin || activePlayer.isMuted ? <MicOff className="w-3.5 h-3.5 text-red-300" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span>{activePlayer.isMutedByAdmin ? 'Muted (Admin)' : 'Admin Mute'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onAdminUpdatePlayer(activePlayer.username, { isVideoOffByAdmin: !activePlayer.isVideoOffByAdmin, isVideoOff: !activePlayer.isVideoOffByAdmin })}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 backdrop-blur-md border ${
+                    activePlayer.isVideoOffByAdmin || activePlayer.isVideoOff
+                      ? 'bg-amber-900/90 text-white border-amber-500 shadow'
+                      : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:bg-slate-800'
+                  }`}
+                  title={activePlayer.isVideoOffByAdmin ? "Enable Active Speaker Camera (Admin)" : "Disable Active Speaker Camera (Admin)"}
+                >
+                  {activePlayer.isVideoOffByAdmin || activePlayer.isVideoOff ? <VideoOff className="w-3.5 h-3.5 text-amber-300" /> : <Video className="w-3.5 h-3.5 text-blue-400" />}
+                  <span>{activePlayer.isVideoOffByAdmin ? 'Camera Off (Admin)' : 'Admin Camera'}</span>
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center p-6 space-y-2">
+            <Video className="w-10 h-10 text-slate-600 mx-auto" />
+            <p className="text-slate-400 text-xs">Stage Ready &bull; Waiting for active speaker turn</p>
+          </div>
+        )}
+      </div>
+
+      {/* Scheduled Speaking Order List Below Active Video Box */}
+      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+          <h4 className="font-extrabold text-xs text-white flex items-center gap-2">
+            <span>📋 Scheduled Speaking Order</span>
+            <span className="text-[10px] bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded font-mono">
+              Alternating Sequence
+            </span>
+          </h4>
+        </div>
+
+        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+          {roomState.registeredRoster && roomState.registeredRoster.length > 0 ? (
+            roomState.registeredRoster.map((player, idx) => {
+              const isTurnActive = activePlayer && activePlayer.username.toLowerCase() === player.username.toLowerCase();
+              return (
                 <div
                   key={player.username}
-                  className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
-                    player.team === 'team1'
+                  className={`p-2 rounded-xl border flex items-center justify-between text-xs transition ${
+                    isTurnActive
+                      ? 'bg-amber-950/60 border-amber-500 text-amber-200 font-bold shadow-sm'
+                      : player.team === 'team1'
                       ? 'bg-blue-950/30 border-blue-800/50 text-blue-200'
                       : 'bg-red-950/30 border-red-800/50 text-red-200'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-lg bg-slate-800 text-slate-300 font-mono font-bold flex items-center justify-center text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-5 h-5 rounded-md font-mono font-bold flex items-center justify-center text-[10px] ${
+                      isTurnActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300'
+                    }`}>
                       #{idx + 1}
                     </span>
                     <div>
@@ -210,19 +245,19 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
                     </div>
                   </div>
 
-                  <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
                     ⏱️ {player.personalizedTime || 180}s turn
                   </span>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-6 text-slate-500 text-xs italic">
-                No players assigned to turn order yet. Host Admin can set roster in Admin Control Suite.
-              </div>
-            )}
-          </div>
+              );
+            })
+          ) : (
+            <div className="text-center py-4 text-slate-500 text-xs italic">
+              No players assigned to turn order yet. Host Admin can set roster in Admin Control Suite.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

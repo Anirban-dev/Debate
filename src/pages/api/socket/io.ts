@@ -448,6 +448,14 @@ const ioHandler = (
           timer.isRunning = true;
           timer.isWarningActive = false;
           timer.autoMutedTriggered = false;
+          if (!timer.activePlayerId && roomState.registeredRoster && roomState.registeredRoster.length > 0) {
+            const firstRosterPlayer = roomState.registeredRoster[0];
+            timer.activePlayerId = firstRosterPlayer.username;
+            timer.activeTeam = firstRosterPlayer.team;
+            if (roomState.players[firstRosterPlayer.username]) {
+              roomState.players[firstRosterPlayer.username].isMuted = false;
+            }
+          }
         } else if (payload.action === "pause") {
           timer.isRunning = false;
         } else if (payload.action === "reset") {

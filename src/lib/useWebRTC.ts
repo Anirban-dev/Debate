@@ -150,9 +150,29 @@ export function useWebRTC(
           activeCalls.current[callerUsername] = call;
         });
 
+        peer.on('disconnected', () => {
+          console.log('PeerJS disconnected from signaling server. Attempting auto-reconnect...');
+          try {
+            if (peer && !peer.destroyed) {
+              peer.reconnect();
+            }
+          } catch (recErr) {
+            console.warn('PeerJS reconnect failed:', recErr);
+          }
+        });
+
         peer.on('error', (err) => {
           if (err.type === 'unavailable-id') {
             console.log('PeerJS ID already active:', peerId);
+          } else if (err.type === 'disconnected' || err.type === 'network' || err.message?.includes('Lost connection')) {
+            console.warn('PeerJS connection dropped, attempting reconnect...');
+            try {
+              if (peer && !peer.destroyed && peer.disconnected) {
+                peer.reconnect();
+              }
+            } catch (rErr) {
+              // Ignore reconnection error
+            }
           } else {
             console.warn('PeerJS Connection Error:', err.type, err);
           }

@@ -450,6 +450,7 @@ export default function Home() {
                   remoteStreams={remoteStreams}
                   onToggleMedia={handleToggleMedia}
                   onControlTimer={handleControlTimer}
+                  onAdminUpdatePlayer={handleAdminUpdatePlayer}
                 />
               </div>
 
