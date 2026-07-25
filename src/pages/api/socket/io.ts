@@ -65,9 +65,15 @@ function getSanitizedRoomStateForPlayer(roomState: MatchRoomState, player: Playe
   const filteredChatMessages = (roomState.chatMessages || []).filter(m => allowedChannels.includes(m.channel));
 
   // Sanitize secret team strategy notes so spectators, admins, and opposing teams cannot read them in WS payloads
+  const defaultTeam1Note = { teamId: "team1" as const, title: 'Team 1 Notes', content: '', updatedAt: 0 };
+  const defaultTeam2Note = { teamId: "team2" as const, title: 'Team 2 Notes', content: '', updatedAt: 0 };
+
+  const team1Note = roomState.teamNotes?.team1 || defaultTeam1Note;
+  const team2Note = roomState.teamNotes?.team2 || defaultTeam2Note;
+
   const sanitizedTeamNotes = {
-    team1: isTeam1Player ? roomState.teamNotes.team1 : { title: 'Team 1 Notes', content: '', updatedAt: 0 },
-    team2: isTeam2Player ? roomState.teamNotes.team2 : { title: 'Team 2 Notes', content: '', updatedAt: 0 }
+    team1: isTeam1Player ? team1Note : defaultTeam1Note,
+    team2: isTeam2Player ? team2Note : defaultTeam2Note
   };
 
   return {
@@ -406,6 +412,13 @@ const ioHandler = (
         if (!player || player.role !== 'player' || player.team !== payload.teamId) {
           socket.emit("chat_error", { message: "Only team members can edit their team strategy notes." });
           return;
+        }
+
+        if (!roomState.teamNotes) {
+          roomState.teamNotes = {
+            team1: { teamId: "team1", title: "Team 1 Secret Strategy Pad", content: "", updatedAt: Date.now() },
+            team2: { teamId: "team2", title: "Team 2 Secret Strategy Pad", content: "", updatedAt: Date.now() }
+          };
         }
 
         const note = roomState.teamNotes[payload.teamId];

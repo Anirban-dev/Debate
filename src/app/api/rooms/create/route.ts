@@ -22,6 +22,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Room ID and Admin Username are required" }, { status: 400 });
     }
 
+    if (activeRooms[cleanRoomId]) {
+      return NextResponse.json(
+        { error: `Room "${cleanRoomId}" already exists. Please choose a different Room ID or join the existing room.` },
+        { status: 400 }
+      );
+    }
+
     const newRoomState: MatchRoomState = {
       roomId: cleanRoomId,
       roomTitle: roomTitle || `Match Room (${cleanRoomId})`,
