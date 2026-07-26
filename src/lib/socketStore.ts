@@ -5,7 +5,9 @@ declare global {
 }
 
 if (!global.activeRooms) {
-  global.activeRooms = {};
+  global.activeRooms = {
+    'main-lobby': createDefaultRoomState('main-lobby', 'Grand Championship Match & Debate Lobby', 'admin')
+  };
 }
 
 export function createDefaultRoomState(

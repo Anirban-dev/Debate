@@ -23,10 +23,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (activeRooms[cleanRoomId]) {
-      return NextResponse.json(
-        { error: `Room "${cleanRoomId}" already exists. Please choose a different Room ID or join the existing room.` },
-        { status: 400 }
-      );
+      const room = activeRooms[cleanRoomId];
+      if (room.adminUsername && room.adminUsername.toLowerCase() !== cleanAdmin) {
+        return NextResponse.json(
+          { error: `Room ID "${cleanRoomId}" already exists. Please choose a different Room ID.` },
+          { status: 400 }
+        );
+      }
+      // Same admin reconfiguring room
+      room.roomTitle = roomTitle || room.roomTitle;
+      room.adminUsername = cleanAdmin;
+      if (registeredRoster.length > 0) {
+        room.registeredRoster = registeredRoster.map((r: any) => ({
+          username: r.username.trim().toLowerCase(),
+          team: r.team,
+          personalizedTime: Number(r.personalizedTime) || 180
+        }));
+      }
+      if (team1TotalTime) {
+        room.team1TotalTime = Number(team1TotalTime);
+        if (!room.timer.isRunning) room.timer.team1TimeRemaining = Number(team1TotalTime);
+      }
+      if (team2TotalTime) {
+        room.team2TotalTime = Number(team2TotalTime);
+        if (!room.timer.isRunning) room.timer.team2TimeRemaining = Number(team2TotalTime);
+      }
+      return NextResponse.json({ success: true, room, reconfigured: true });
     }
 
     const newRoomState: MatchRoomState = {

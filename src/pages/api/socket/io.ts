@@ -231,11 +231,19 @@ const ioHandler = (
         if (!rawUsername) return;
 
         if (!activeRooms[targetRoomId]) {
-          socket.emit("room_not_found_error", {
-            roomId: targetRoomId,
-            message: `Lobby "${targetRoomId}" does not exist. Please check the Lobby ID or ask the host to create it.`
-          });
-          return;
+          if (targetRoomId === 'main-lobby') {
+            activeRooms['main-lobby'] = createDefaultRoomState(
+              'main-lobby',
+              'Grand Championship Match & Debate Lobby',
+              'admin'
+            );
+          } else {
+            socket.emit("room_not_found_error", {
+              roomId: targetRoomId,
+              message: `Lobby "${targetRoomId}" does not exist. Ask the host to create it first.`
+            });
+            return;
+          }
         }
 
         const roomState = activeRooms[targetRoomId];
