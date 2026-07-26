@@ -28,12 +28,37 @@ export const MediaVideoElement: React.FC<{
       video.srcObject = stream;
     }
 
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.catch((err) => {
-        console.warn('MediaVideoElement play error:', err);
-      });
-    }
+    const attemptPlay = () => {
+      if (video && video.paused) {
+        video.play().catch((err) => {
+          console.warn('MediaVideoElement play error:', err);
+        });
+      }
+    };
+
+    video.addEventListener('loadedmetadata', attemptPlay);
+    video.addEventListener('loadeddata', attemptPlay);
+    video.addEventListener('canplay', attemptPlay);
+
+    attemptPlay();
+
+    const handleTrackChange = () => {
+      if (video) {
+        video.srcObject = new MediaStream(stream.getTracks());
+        attemptPlay();
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      video.removeEventListener('loadedmetadata', attemptPlay);
+      video.removeEventListener('loadeddata', attemptPlay);
+      video.removeEventListener('canplay', attemptPlay);
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
   }, [stream]);
 
   if (!stream) return null;

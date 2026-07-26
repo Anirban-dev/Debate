@@ -85,33 +85,44 @@ export function useWebRTC(
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnections.current[targetKey] = pc;
 
+    // Add audio & video transceivers to guarantee sendrecv directionality in SDP offers
+    try {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (_) {}
+
     // Attach local stream tracks if available
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        try {
-          pc.addTrack(track, localStreamRef.current!);
-        } catch (_) {}
+        const senders = pc.getSenders();
+        const existingSender = senders.find((s) => s.track?.kind === track.kind);
+        if (existingSender) {
+          existingSender.replaceTrack(track).catch(() => {});
+        } else {
+          try {
+            pc.addTrack(track, localStreamRef.current!);
+          } catch (_) {}
+        }
       });
     }
 
-    // Handle remote media track
+    // Handle remote media track - Always construct a new MediaStream instance so React updates state
     pc.ontrack = (event) => {
       setRemoteStreams((prev) => {
         const existingStream = prev[targetKey];
-        if (event.streams && event.streams[0]) {
-          const stream = event.streams[0];
-          return { ...prev, [targetKey]: stream };
-        }
-
         let updatedStream: MediaStream;
+
         if (existingStream) {
           if (!existingStream.getTracks().some((t) => t.id === event.track.id)) {
             existingStream.addTrack(event.track);
           }
           updatedStream = new MediaStream(existingStream.getTracks());
+        } else if (event.streams && event.streams[0]) {
+          updatedStream = new MediaStream(event.streams[0].getTracks());
         } else {
           updatedStream = new MediaStream([event.track]);
         }
+
         return {
           ...prev,
           [targetKey]: updatedStream,
