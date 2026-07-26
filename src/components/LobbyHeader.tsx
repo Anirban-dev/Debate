@@ -92,20 +92,10 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
           </div>
         </div>
 
-        {/* Center: Live Timer Clock Section */}
+        {/* Center: Live Timer Clock Section / Play Again Button */}
         <div className="flex items-center gap-3 bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800 shadow-inner">
-          {/* Team 1 Clock */}
-          <div className={`text-center px-2 py-1 rounded-lg ${timer.activeTeam === 'team1' ? 'bg-blue-950/60 border border-blue-800/80' : ''}`}>
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-blue-400 block">Team 1</span>
-            <span className="text-sm sm:text-base font-mono font-bold text-blue-200">
-              {formatTime(timer.team1TimeRemaining)}
-            </span>
-          </div>
-
-          <div className="h-6 w-px bg-slate-800"></div>
-
           {/* Turn Countdown Clock */}
-          <div className={`text-center px-3 py-1 rounded-lg transition-all ${
+          <div className={`text-center px-4 py-1 rounded-lg transition-all ${
             timer.isWarningActive
               ? 'bg-amber-950/80 border border-amber-600 animate-pulse text-amber-300'
               : timer.autoMutedTriggered
@@ -120,15 +110,22 @@ export const LobbyHeader: React.FC<LobbyHeaderProps> = ({
             </span>
           </div>
 
-          <div className="h-6 w-px bg-slate-800"></div>
-
-          {/* Team 2 Clock */}
-          <div className={`text-center px-2 py-1 rounded-lg ${timer.activeTeam === 'team2' ? 'bg-red-950/60 border border-red-800/80' : ''}`}>
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-red-400 block">Team 2</span>
-            <span className="text-sm sm:text-base font-mono font-bold text-red-200">
-              {formatTime(timer.team2TimeRemaining)}
-            </span>
-          </div>
+          {/* If Sequence is Finished, show Play Again Button for Admin right in the top panel */}
+          {(roomState.isSequenceFinished || (roomState.registeredRoster?.length > 0 && roomState.registeredRoster.every(r => (roomState.spokeUsernames || []).includes(r.username.toLowerCase())))) && (
+            currentUser?.role === 'admin' ? (
+              <button
+                onClick={() => onControlTimer('requeue')}
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center gap-1.5 animate-pulse"
+                title="Reset turn history and re-queue all debaters for a new sequence"
+              >
+                <span>🔄 Play Again</span>
+              </button>
+            ) : (
+              <span className="px-3 py-1.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-lg text-xs font-bold">
+                🏆 Match Complete
+              </span>
+            )
+          )}
         </div>
 
         {/* Right: Actions */}

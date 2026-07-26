@@ -353,6 +353,25 @@ export function useWebRTC(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, currentUser?.username, getOrCreatePeerConnection]);
 
+  // Auto stream-sync whenever roomState updates and online participants exist
+  useEffect(() => {
+    if (!socket || !currentUser || !roomState?.players) return;
+
+    const myUser = currentUser.username.toLowerCase();
+    Object.values(roomState.players).forEach((p) => {
+      const uname = p.username.toLowerCase();
+      if (uname !== myUser && p.isOnline) {
+        const pc = peerConnections.current[uname];
+        if (!pc || pc.connectionState === 'failed' || pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+          socket.emit('webrtc_request_stream', {
+            targetUsername: uname,
+            senderUsername: currentUser.username,
+          });
+        }
+      }
+    });
+  }, [socket, currentUser?.username, currentUser, roomState?.players]);
+
   // Clean up peer connections on unmount
   useEffect(() => {
     return () => {

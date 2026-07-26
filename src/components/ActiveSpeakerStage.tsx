@@ -76,207 +76,6 @@ export const RemoteAudioElement: React.FC<{
   return <audio ref={audioRef} autoPlay muted={isMuted} className="hidden" />;
 };
 
-// Dedicated Separate Area for Room Admin / Moderator Broadcast & Direct Controls
-const AdminStageBox: React.FC<{
-  roomState: MatchRoomState;
-  currentUser: Player | null;
-  localStream?: MediaStream | null;
-  remoteStreams?: Record<string, MediaStream>;
-  onToggleMedia?: (mediaType: 'mic' | 'video', value: boolean) => void;
-  onControlTimer?: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
-}> = ({ roomState, currentUser, localStream, remoteStreams = {}, onToggleMedia, onControlTimer }) => {
-  const adminPlayer = Object.values(roomState.players).find(
-    (p) => p.role === 'admin' || p.username.toLowerCase() === (roomState.adminUsername || '').toLowerCase()
-  ) || null;
-
-  const isAdminSelf = !!(currentUser && adminPlayer && currentUser.username.toLowerCase() === adminPlayer.username.toLowerCase());
-  const adminStream = isAdminSelf ? localStream : (adminPlayer ? remoteStreams[adminPlayer.username.toLowerCase()] : null);
-
-  if (!adminPlayer) return null;
-
-  return (
-    <div className="bg-gradient-to-r from-purple-950/90 via-slate-900 to-indigo-950/90 border border-purple-800/70 rounded-2xl p-4 shadow-xl space-y-3 relative overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-800/50 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="p-1.5 rounded-lg bg-purple-900/80 text-purple-300 border border-purple-700/80">
-            <Shield className="w-4 h-4 text-purple-300" />
-          </span>
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-wider text-purple-200 flex items-center gap-2">
-              <span>Admin & Moderator Spotlight Area</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-900 text-purple-300 border border-purple-700">
-                @{adminPlayer.username}
-              </span>
-            </h3>
-            <p className="text-[11px] text-purple-300/70">
-              Dedicated separate broadcast area &bull; Always live during Lobby, Active Match & Paused states
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!adminPlayer.isMuted ? (
-            <span className="px-2.5 py-1 rounded-full bg-emerald-950/90 border border-emerald-600 text-emerald-300 text-xs font-bold flex items-center gap-1.5 shadow">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Admin Mic Open
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700 text-slate-400 text-xs font-semibold flex items-center gap-1">
-              <MicOff className="w-3.5 h-3.5 text-slate-500" />
-              Mic Muted
-            </span>
-          )}
-
-          {!adminPlayer.isVideoOff ? (
-            <span className="px-2.5 py-1 rounded-full bg-blue-950/90 border border-blue-600 text-blue-300 text-xs font-bold flex items-center gap-1.5 shadow">
-              <Video className="w-3.5 h-3.5 text-blue-400" />
-              Video Live
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700 text-slate-400 text-xs font-semibold flex items-center gap-1">
-              <VideoOff className="w-3.5 h-3.5 text-slate-500" />
-              Cam Off
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Main Admin Display & Video Area */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-        {/* Left: Video / Avatar Box */}
-        <div className="sm:col-span-5 relative aspect-video bg-slate-950 rounded-xl border border-purple-900/60 overflow-hidden flex items-center justify-center shadow-inner">
-          {/* Remote audio listener for spectators & non-admin participants */}
-          {!isAdminSelf && adminStream && (
-            <RemoteAudioElement stream={adminStream} isMuted={adminPlayer.isMuted} />
-          )}
-
-          {!adminPlayer.isVideoOff && adminStream ? (
-            <MediaVideoElement stream={adminStream} isSelf={isAdminSelf} className="w-full h-full object-cover rounded-xl" />
-          ) : (
-            <div className="flex items-center gap-3 p-3">
-              <div className="relative">
-                <img
-                  src={adminPlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${adminPlayer.username}`}
-                  alt={adminPlayer.username}
-                  className="w-14 h-14 rounded-full bg-purple-950 border-2 border-purple-500 object-cover"
-                />
-                {!adminPlayer.isMuted && (
-                  <span className="absolute bottom-0 right-0 p-1 bg-emerald-500 text-slate-950 rounded-full shadow">
-                    <Radio className="w-3 h-3 animate-pulse" />
-                  </span>
-                )}
-              </div>
-              <div>
-                <span className="font-bold text-sm text-white block">
-                  @{adminPlayer.username}
-                </span>
-                <span className="text-[10px] text-purple-300 font-medium block">
-                  Match Host / Admin
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  {adminPlayer.isVideoOff ? '📹 Camera Off' : (adminStream ? '📹 Camera Live' : '📹 Initializing Feed...')} &bull; {adminPlayer.isMuted ? '🎙️ Muted' : '🎙️ Mic Active'}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Controls & Host Actions */}
-        <div className="sm:col-span-7 space-y-2.5">
-          {isAdminSelf ? (
-            <div className="space-y-2 bg-slate-950/70 p-3 rounded-xl border border-purple-900/40">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-200">
-                  🎛️ Admin Mic & Video Controls (Active in Lobby & Pause)
-                </span>
-                <span className="text-[10px] text-emerald-400 font-mono font-bold">Host Broadcast</span>
-              </div>
-
-              {/* Directly Accessible Mute / Video Toggle Buttons for Admin Himself */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onToggleMedia?.('mic', !currentUser?.isMuted)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border shadow-md ${
-                    currentUser?.isMuted
-                      ? 'bg-red-900/90 hover:bg-red-800 text-white border-red-600'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400'
-                  }`}
-                >
-                  {currentUser?.isMuted ? (
-                    <>
-                      <MicOff className="w-4 h-4" />
-                      <span>Unmute My Mic</span>
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-4 h-4" />
-                      <span>Mute My Mic</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onToggleMedia?.('video', !currentUser?.isVideoOff)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border shadow-md ${
-                    currentUser?.isVideoOff
-                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400'
-                  }`}
-                >
-                  {currentUser?.isVideoOff ? (
-                    <>
-                      <VideoOff className="w-4 h-4 text-slate-300" />
-                      <span>Turn Cam ON</span>
-                    </>
-                  ) : (
-                    <>
-                      <Video className="w-4 h-4" />
-                      <span>Turn Cam OFF</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Timer & Session Quick Action */}
-              {onControlTimer && (
-                <div className="pt-1 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onControlTimer(roomState.timer.isRunning ? 'pause' : 'start')}
-                    className="flex-1 py-1.5 px-3 bg-purple-900/80 hover:bg-purple-800 text-purple-200 font-bold text-xs rounded-lg border border-purple-700 transition flex items-center justify-center gap-1.5"
-                  >
-                    {roomState.timer.isRunning ? '⏸️ Pause Match' : '▶️ Resume Match'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onControlTimer('switch_turn')}
-                    className="py-1.5 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs rounded-lg border border-slate-700 transition"
-                  >
-                    ⏭️ Switch Turn
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="bg-slate-950/60 p-3 rounded-xl border border-purple-900/30 text-xs text-slate-300 space-y-1">
-              <p className="font-bold text-purple-200 flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-purple-400" />
-                Moderator Broadcast Active
-              </p>
-              <p className="text-[11px] text-slate-400">
-                The Admin can broadcast live announcements and moderate the debate session for all players and spectators, including during lobby & paused states.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   roomState,
   currentUser,
@@ -287,6 +86,11 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
   onAdminUpdatePlayer
 }) => {
   const timer = roomState?.timer;
+  
+  // Check if sequence is finished
+  const roster = roomState.registeredRoster || [];
+  const spokeList = roomState.spokeUsernames || [];
+  const isSequenceFinished = roomState.isSequenceFinished || (roster.length > 0 && roster.every(r => spokeList.includes(r.username.toLowerCase())));
   
   // Always determine activePlayer (whether match is running, paused, or pre-match lobby)
   const activePlayer = (timer?.activePlayerId && roomState.players[timer.activePlayerId])
@@ -321,15 +125,31 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Dedicated Separate Area for Room Admin / Moderator Broadcast */}
-      <AdminStageBox
-        roomState={roomState}
-        currentUser={currentUser}
-        localStream={localStream}
-        remoteStreams={remoteStreams}
-        onToggleMedia={onToggleMedia}
-        onControlTimer={onControlTimer}
-      />
+      {/* Sequence Finished / Re-queue Banner */}
+      {isSequenceFinished && (
+        <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-purple-950 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-2xl flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🏆</span>
+              <h3 className="text-sm font-extrabold text-emerald-300 uppercase tracking-wide">
+                Sequence Completed — All Speakers Have Finished
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300">
+              All registered players in the speaking queue have completed their turns.
+            </p>
+          </div>
+
+          {currentUser?.role === 'admin' && onControlTimer && (
+            <button
+              onClick={() => onControlTimer('requeue')}
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-950/80 transition flex items-center gap-2 shrink-0 animate-bounce"
+            >
+              🔄 Re-queue All & Start Again
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Active Debater Spotlight Stage */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3 relative overflow-hidden">

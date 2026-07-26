@@ -27,26 +27,23 @@ function updateSpectatorCount(roomState: MatchRoomState) {
 
 function recalculateTeamEqualTime(roomState: MatchRoomState, team: TeamId) {
   const totalTeamTime = team === "team1" ? roomState.team1TotalTime : roomState.team2TotalTime;
-  const teamPlayers = (Object.values(roomState.players) as Player[]).filter(
-    p => p.role === "player" && p.team === team
-  );
-  if (teamPlayers.length === 0) return;
+  const teamRoster = (roomState.registeredRoster || []).filter(r => r.team === team);
+  if (teamRoster.length === 0) return;
 
-  // Filter for players who have NOT finished speaking yet (remainingSeconds > 0)
-  const remainingPlayers = teamPlayers.filter(p => p.remainingSeconds > 0);
-  const targetPlayers = remainingPlayers.length > 0 ? remainingPlayers : teamPlayers;
+  // Actual time divided equally among players in team
+  const equalShare = Math.max(10, Math.floor(totalTeamTime / teamRoster.length));
 
-  // Calculate time consumed by players who have already finished speaking
-  const consumedTime = teamPlayers
-    .filter(p => p.remainingSeconds <= 0)
-    .reduce((acc, p) => acc + (p.timeLimitSeconds || 0), 0);
+  teamRoster.forEach(r => {
+    r.personalizedTime = equalShare;
+  });
 
-  const availableTimeForRemaining = Math.max(10, totalTeamTime - consumedTime);
-  const equalShare = Math.max(10, Math.floor(availableTimeForRemaining / targetPlayers.length));
-
-  targetPlayers.forEach(p => {
-    p.timeLimitSeconds = equalShare;
-    p.remainingSeconds = equalShare;
+  Object.values(roomState.players).forEach(p => {
+    if (p.role === "player" && p.team === team) {
+      p.timeLimitSeconds = equalShare;
+      if (!p.hasSpoken) {
+        p.remainingSeconds = equalShare;
+      }
+    }
   });
 }
 
@@ -145,19 +142,54 @@ function startTimerLoop(io: ServerIO) {
         (timer.activeTeam === "team1" && timer.team1TimeRemaining <= 0) ||
         (timer.activeTeam === "team2" && timer.team2TimeRemaining <= 0)
       ) {
-        timer.isRunning = false;
         timer.autoMutedTriggered = true;
 
-        if (timer.activePlayerId && roomState.players[timer.activePlayerId]) {
-          const player = roomState.players[timer.activePlayerId];
-          player.isMuted = true;
+        if (timer.activePlayerId) {
+          const finishedUsername = timer.activePlayerId.toLowerCase();
+          if (!roomState.spokeUsernames) roomState.spokeUsernames = [];
+          if (!roomState.spokeUsernames.includes(finishedUsername)) {
+            roomState.spokeUsernames.push(finishedUsername);
+          }
+          if (roomState.players[timer.activePlayerId]) {
+            roomState.players[timer.activePlayerId].isMuted = true;
+            roomState.players[timer.activePlayerId].hasSpoken = true;
+          }
+        }
+
+        // Find next player in roster who has not spoken
+        const spokeSet = (roomState.spokeUsernames || []).map(s => s.toLowerCase());
+        const nextInRoster = (roomState.registeredRoster || []).find(r => !spokeSet.includes(r.username.toLowerCase()));
+
+        if (nextInRoster) {
+          timer.activePlayerId = nextInRoster.username;
+          timer.activeTeam = nextInRoster.team;
+          timer.turnTimeRemaining = nextInRoster.personalizedTime || 180;
+          timer.isWarningActive = false;
+          timer.autoMutedTriggered = false;
+          if (roomState.players[nextInRoster.username]) {
+            roomState.players[nextInRoster.username].isMuted = false;
+          }
           roomState.chatMessages.push({
-            id: `sys-mute-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            id: `sys-next-${Date.now()}`,
             senderId: "system",
             senderName: "System",
             senderRole: "admin",
             channel: "global",
-            text: `⏰ Time's up! Active speaker @${player.username} has been automatically muted.`,
+            text: `📢 Turn finished! Now active: @${nextInRoster.username} (${nextInRoster.team.toUpperCase()})`,
+            timestamp: Date.now(),
+            isSystem: true
+          });
+        } else {
+          // All players in sequence have spoken
+          timer.isRunning = false;
+          roomState.isSequenceFinished = true;
+          roomState.chatMessages.push({
+            id: `sys-finish-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: "🏆 All debaters in the sequence have completed their turn! Admin can click Play Again to restart.",
             timestamp: Date.now(),
             isSystem: true
           });
@@ -435,16 +467,76 @@ const ioHandler = (
       socket.on("admin_update_roster", (payload: { roster: { username: string; team: TeamId; personalizedTime?: number }[] }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
+        
+        // Queue change only available during pause
+        if (roomState.timer.isRunning) {
+          socket.emit("time_update_error", {
+            message: "Queue reordering is only permitted when the debate session is paused."
+          });
+          return;
+        }
+
+        // Lock positions of people who have spoken or active speaker
+        const spokeList = (roomState.spokeUsernames || []).map(s => s.toLowerCase());
+        const activeId = roomState.timer.activePlayerId?.toLowerCase();
+        
+        const oldRoster = roomState.registeredRoster || [];
+        const lockedUsernames = oldRoster
+          .map(r => r.username.toLowerCase())
+          .filter(u => spokeList.includes(u) || u === activeId);
+
+        const newLockedUsernames = payload.roster
+          .map(r => r.username.toLowerCase())
+          .filter(u => lockedUsernames.includes(u));
+
+        if (JSON.stringify(lockedUsernames) !== JSON.stringify(newLockedUsernames)) {
+          socket.emit("time_update_error", {
+            message: "Cannot reorder players who have already spoken or the active speaker."
+          });
+          return;
+        }
+
         roomState.registeredRoster = payload.roster;
+        recalculateTeamEqualTime(roomState, "team1");
+        recalculateTeamEqualTime(roomState, "team2");
         broadcastSanitizedRoomState(io, roomState);
       });
 
-      socket.on("admin_control_timer", (payload: { action: "start" | "pause" | "reset" | "switch_turn"; activeTeam?: TeamId; activePlayerId?: string; turnSeconds?: number; warningSeconds?: number; team1Time?: number; team2Time?: number }) => {
+      socket.on("admin_control_timer", (payload: { action: "start" | "pause" | "reset" | "switch_turn" | "requeue"; activeTeam?: TeamId; activePlayerId?: string; turnSeconds?: number; warningSeconds?: number; team1Time?: number; team2Time?: number }) => {
         if (!currentRoomId || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
         const timer = roomState.timer;
 
-        if (payload.action === "start") {
+        if (payload.action === "requeue") {
+          roomState.spokeUsernames = [];
+          roomState.isSequenceFinished = false;
+          Object.values(roomState.players).forEach(p => { p.hasSpoken = false; });
+          
+          recalculateTeamEqualTime(roomState, "team1");
+          recalculateTeamEqualTime(roomState, "team2");
+
+          if (roomState.registeredRoster && roomState.registeredRoster.length > 0) {
+            const firstPlayer = roomState.registeredRoster[0];
+            timer.activePlayerId = firstPlayer.username;
+            timer.activeTeam = firstPlayer.team;
+            timer.turnTimeRemaining = firstPlayer.personalizedTime || 180;
+          }
+          timer.isRunning = false;
+          timer.isWarningActive = false;
+          timer.autoMutedTriggered = false;
+
+          roomState.chatMessages.push({
+            id: `sys-requeue-${Date.now()}`,
+            senderId: "system",
+            senderName: "System",
+            senderRole: "admin",
+            channel: "global",
+            text: "🔄 Debate queue re-queued! Turn history reset and ready for new sequence.",
+            timestamp: Date.now(),
+            isSystem: true
+          });
+        } else if (payload.action === "start") {
+          roomState.isSequenceFinished = false;
           timer.isRunning = true;
           timer.isWarningActive = false;
           timer.autoMutedTriggered = false;
@@ -452,6 +544,7 @@ const ioHandler = (
             const firstRosterPlayer = roomState.registeredRoster[0];
             timer.activePlayerId = firstRosterPlayer.username;
             timer.activeTeam = firstRosterPlayer.team;
+            timer.turnTimeRemaining = firstRosterPlayer.personalizedTime || 180;
             if (roomState.players[firstRosterPlayer.username]) {
               roomState.players[firstRosterPlayer.username].isMuted = false;
             }
@@ -462,18 +555,57 @@ const ioHandler = (
           timer.isRunning = false;
           timer.isWarningActive = false;
           timer.autoMutedTriggered = false;
-          timer.team1TimeRemaining = payload.team1Time ?? roomState.team1TotalTime;
-          timer.team2TimeRemaining = payload.team2Time ?? roomState.team2TotalTime;
-          timer.turnTimeRemaining = payload.turnSeconds ?? 60;
+          roomState.spokeUsernames = [];
+          roomState.isSequenceFinished = false;
+          if (payload.team1Time !== undefined) roomState.team1TotalTime = payload.team1Time;
+          if (payload.team2Time !== undefined) roomState.team2TotalTime = payload.team2Time;
+          recalculateTeamEqualTime(roomState, "team1");
+          recalculateTeamEqualTime(roomState, "team2");
+          timer.team1TimeRemaining = roomState.team1TotalTime;
+          timer.team2TimeRemaining = roomState.team2TotalTime;
+          if (roomState.registeredRoster?.[0]) {
+            timer.activePlayerId = roomState.registeredRoster[0].username;
+            timer.activeTeam = roomState.registeredRoster[0].team;
+            timer.turnTimeRemaining = roomState.registeredRoster[0].personalizedTime || 180;
+          }
         } else if (payload.action === "switch_turn") {
-          if (payload.activeTeam) timer.activeTeam = payload.activeTeam;
+          if (timer.activePlayerId) {
+            const curUser = timer.activePlayerId.toLowerCase();
+            if (!roomState.spokeUsernames) roomState.spokeUsernames = [];
+            if (!roomState.spokeUsernames.includes(curUser)) {
+              roomState.spokeUsernames.push(curUser);
+            }
+            if (roomState.players[timer.activePlayerId]) {
+              roomState.players[timer.activePlayerId].hasSpoken = true;
+            }
+          }
+
           if (payload.activePlayerId) {
             timer.activePlayerId = payload.activePlayerId;
+            const p = roomState.registeredRoster?.find(r => r.username.toLowerCase() === payload.activePlayerId!.toLowerCase());
+            if (p) {
+              timer.activeTeam = p.team;
+              timer.turnTimeRemaining = payload.turnSeconds ?? (p.personalizedTime || 180);
+            }
             if (roomState.players[payload.activePlayerId]) {
               roomState.players[payload.activePlayerId].isMuted = false;
             }
+          } else {
+            const spokeSet = (roomState.spokeUsernames || []).map(s => s.toLowerCase());
+            const nextP = (roomState.registeredRoster || []).find(r => !spokeSet.includes(r.username.toLowerCase()));
+
+            if (nextP) {
+              timer.activePlayerId = nextP.username;
+              timer.activeTeam = nextP.team;
+              timer.turnTimeRemaining = nextP.personalizedTime || 180;
+              if (roomState.players[nextP.username]) {
+                roomState.players[nextP.username].isMuted = false;
+              }
+            } else {
+              roomState.isSequenceFinished = true;
+              timer.isRunning = false;
+            }
           }
-          if (payload.turnSeconds) timer.turnTimeRemaining = payload.turnSeconds;
           timer.isWarningActive = false;
           timer.autoMutedTriggered = false;
         }
@@ -483,9 +615,11 @@ const ioHandler = (
         }
         if (payload.team1Time !== undefined) {
           roomState.team1TotalTime = payload.team1Time;
+          recalculateTeamEqualTime(roomState, "team1");
         }
         if (payload.team2Time !== undefined) {
           roomState.team2TotalTime = payload.team2Time;
+          recalculateTeamEqualTime(roomState, "team2");
         }
 
         broadcastSanitizedRoomState(io, roomState);

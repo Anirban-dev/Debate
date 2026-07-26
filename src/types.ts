@@ -13,6 +13,7 @@ export interface Player {
   isMutedByAdmin: boolean;
   isVideoOffByAdmin: boolean;
   isOnline: boolean;
+  hasSpoken?: boolean; // True if player has completed their turn in current sequence
   timeLimitSeconds: number; // custom time personalized for player turn
   remainingSeconds: number; // current turn remaining time
   authProvider?: 'google' | 'discord' | 'direct';
@@ -67,6 +68,8 @@ export interface MatchRoomState {
     team2: SharedNotePage;
   };
   bannedUsernames: string[];
+  spokeUsernames?: string[]; // Usernames who have completed their turn
+  isSequenceFinished?: boolean; // True when all players in registered roster have spoken
   chatMessages: ChatMessage[];
   timer: TimerState;
   spectatorCount: number;

@@ -61,7 +61,7 @@ export const FloatingAdminWidget: React.FC<FloatingAdminWidgetProps> = ({
   const isCamOn = !adminPlayer.isVideoOff;
 
   return (
-    <div className="fixed bottom-5 left-5 z-50 flex flex-col items-start gap-2 max-w-[calc(100vw-2.5rem)] select-none">
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2 max-w-[calc(100vw-2.5rem)] select-none">
       {/* Remote Audio Listener for everyone when admin stream is active & non-self */}
       {!isAdminSelf && adminStream && (
         <RemoteAudioElement stream={adminStream} isMuted={adminPlayer.isMuted} />
