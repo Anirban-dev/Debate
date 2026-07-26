@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MatchRoomState, Player, TeamId } from '../types';
 import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock, UserX, Ban, Edit2, Check, X, ArrowRightLeft } from 'lucide-react';
 import { MediaVideoElement, RemoteAudioElement } from './ActiveSpeakerStage';
+import { PopupModal, ModalData } from './PopupModal';
 
 interface PlayerRosterGridProps {
   roomState: MatchRoomState;
@@ -68,6 +69,22 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
 }) => {
   const { players, timer } = roomState;
 
+  // Local popup modal state
+  const [localModalData, setLocalModalData] = useState<ModalData | null>(null);
+
+  const triggerNotice = (title: string, message: string, type: 'warning' | 'error' | 'info' = 'warning') => {
+    if (onShowNotice) {
+      onShowNotice(title, message);
+    } else {
+      setLocalModalData({
+        isOpen: true,
+        title,
+        message,
+        type
+      });
+    }
+  };
+
   // Edit team time inline state
   const [editingTeam, setEditingTeam] = useState<TeamId | null>(null);
   const [teamTimeMinutesInput, setTeamTimeMinutesInput] = useState<number>(5);
@@ -83,11 +100,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
 
   const handleStartTeamTimeEdit = (team: TeamId) => {
     if (isSessionRunning) {
-      if (onShowNotice) {
-        onShowNotice("Session Active", "⚠️ Debate session is active! Admin must pause the debate session first before modifying team time.");
-      } else {
-        alert("⚠️ Debate session is active! Admin must pause the debate session first before modifying team time.");
-      }
+      triggerNotice("Session Active", "Debate session is active! Admin must pause the debate session first before modifying team time.");
       return;
     }
     const totalSecs = team === 'team1' ? (roomState.team1TotalTime || 300) : (roomState.team2TotalTime || 300);
@@ -206,11 +219,7 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
                       <button
                         onClick={() => {
                           if (isSessionRunning) {
-                            if (onShowNotice) {
-                              onShowNotice("Session Active", "⚠️ Debate session is active! Session must be paused before adjusting personal time.");
-                            } else {
-                              alert("⚠️ Debate session is active! Session must be paused before adjusting personal time.");
-                            }
+                            triggerNotice("Session Active", "Debate session is active! Session must be paused before adjusting personal time.");
                             return;
                           }
                           setPlayerTimeInput(player.timeLimitSeconds || 100);
@@ -433,6 +442,8 @@ export const PlayerRosterGrid: React.FC<PlayerRosterGridProps> = ({
           )}
         </div>
       </div>
+
+      <PopupModal data={localModalData} onClose={() => setLocalModalData(null)} />
     </div>
   );
 };
