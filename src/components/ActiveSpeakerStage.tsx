@@ -43,7 +43,7 @@ export const MediaVideoElement: React.FC<{
       ref={videoRef}
       autoPlay
       playsInline
-      muted={isSelf}
+      muted={true}
       className={`${className} ${isSelf ? 'transform -scale-x-100' : ''}`}
     />
   );
@@ -67,9 +67,28 @@ export const RemoteAudioElement: React.FC<{
     audio.muted = !!isMuted;
     const playPromise = audio.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {});
+      playPromise.catch((err) => {
+        console.warn('RemoteAudioElement play prevented, waiting for user interaction:', err);
+      });
     }
   }, [stream, isMuted]);
+
+  useEffect(() => {
+    const handleGesture = () => {
+      const audio = audioRef.current;
+      if (audio && audio.paused && !isMuted) {
+        audio.play().catch(() => {});
+      }
+    };
+
+    window.addEventListener('click', handleGesture, { once: false });
+    window.addEventListener('keydown', handleGesture, { once: false });
+
+    return () => {
+      window.removeEventListener('click', handleGesture);
+      window.removeEventListener('keydown', handleGesture);
+    };
+  }, [isMuted]);
 
   if (!stream) return null;
 

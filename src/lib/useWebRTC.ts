@@ -39,124 +39,41 @@ export function useWebRTC(
     currentUserRef.current = currentUser;
   }, [currentUser]);
 
-  // 1. Initialize Local Media Stream (Camera & Microphone)
-  useEffect(() => {
-    const targetUsername = currentUser?.username;
-    const targetRole = currentUser?.role;
+  // Attach/update local tracks across all active peer connections
+  const syncLocalTracksToPeers = useCallback(() => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
 
-    if (!targetUsername || targetRole === 'spectator') {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
-        localStreamRef.current = null;
-        setLocalStream(null);
-      }
-      return;
-    }
-
-    let isMounted = true;
-
-    async function initLocalStream() {
-      if (localStreamRef.current) return;
-
-      let stream: MediaStream | null = null;
-
-      // Try 1: High quality video & audio
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { max: 30 } },
-          audio: { echoCancellation: true, noiseSuppression: true },
-        });
-      } catch (err1) {
-        console.warn('Standard HD getUserMedia failed, trying fallback constraints:', err1);
-        // Try 2: Basic video & audio
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        } catch (err2) {
-          console.warn('Basic video & audio failed, trying video only:', err2);
-          // Try 3: Video only
+    Object.entries(peerConnections.current).forEach(async ([remoteUser, pc]) => {
+      let tracksAdded = false;
+      stream.getTracks().forEach((track) => {
+        const senders = pc.getSenders();
+        const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+        if (existingSender) {
+          existingSender.replaceTrack(track).catch(() => {});
+        } else {
           try {
-            stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          } catch (err3) {
-            console.warn('Video only failed, trying audio only:', err3);
-            // Try 4: Audio only
-            try {
-              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (err4) {
-              console.error('All getUserMedia attempts failed:', err4);
-            }
-          }
+            pc.addTrack(track, stream);
+            tracksAdded = true;
+          } catch (_) {}
         }
-      }
+      });
 
-      if (!isMounted) {
-        if (stream) {
-          stream.getTracks().forEach((t) => t.stop());
-        }
-        return;
-      }
-
-      if (stream) {
-        localStreamRef.current = stream;
-
-        // Apply current mute / video off settings
-        if (currentUserRef.current) {
-          const videoTrack = stream.getVideoTracks()[0];
-          if (videoTrack) videoTrack.enabled = !currentUserRef.current.isVideoOff;
-
-          const audioTrack = stream.getAudioTracks()[0];
-          if (audioTrack) audioTrack.enabled = !currentUserRef.current.isMuted;
-        }
-
-        setLocalStream(stream);
-
-        // Attach local tracks to any existing peer connections and trigger re-offers
-        Object.entries(peerConnections.current).forEach(async ([remoteUser, pc]) => {
-          stream!.getTracks().forEach((track) => {
-            const senders = pc.getSenders();
-            const existingSender = senders.find((s) => s.track?.kind === track.kind);
-            if (existingSender) {
-              existingSender.replaceTrack(track).catch(() => {});
-            } else {
-              try {
-                pc.addTrack(track, stream!);
-              } catch (_) {}
-            }
+      if (tracksAdded && socket && currentUserRef.current) {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('webrtc_offer', {
+            targetUsername: remoteUser,
+            offer,
+            senderUsername: currentUserRef.current.username,
           });
-
-          if (socket && currentUserRef.current) {
-            try {
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              socket.emit('webrtc_offer', {
-                targetUsername: remoteUser,
-                offer,
-                senderUsername: currentUserRef.current.username,
-              });
-            } catch (err) {
-              console.warn('Re-offer error:', err);
-            }
-          }
-        });
+        } catch (err) {
+          console.warn('Error sending renegotiation offer:', err);
+        }
       }
-    }
-
-    initLocalStream();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser?.username, currentUser?.role, socket]);
-
-  // Dynamic mute / video off updates on local tracks
-  useEffect(() => {
-    if (!localStreamRef.current || !currentUser) return;
-
-    const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (videoTrack) videoTrack.enabled = !currentUser.isVideoOff;
-
-    const audioTrack = localStreamRef.current.getAudioTracks()[0];
-    if (audioTrack) audioTrack.enabled = !currentUser.isMuted;
-  }, [currentUser?.isVideoOff, currentUser?.isMuted, currentUser]);
+    });
+  }, [socket]);
 
   // Helper to get or create RTCPeerConnection for a remote player
   const getOrCreatePeerConnection = useCallback((targetUsername: string): RTCPeerConnection => {
@@ -168,41 +85,38 @@ export function useWebRTC(
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnections.current[targetKey] = pc;
 
-    // Add audio & video transceivers to ensure bidirectional media capabilities
-    try {
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
-      pc.addTransceiver('video', { direction: 'sendrecv' });
-    } catch (_) {}
-
-    // Attach local stream tracks
+    // Attach local stream tracks if available
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        const senders = pc.getSenders();
-        const existingSender = senders.find((s) => s.track?.kind === track.kind);
-        if (existingSender) {
-          existingSender.replaceTrack(track).catch(() => {});
-        } else {
-          try {
-            pc.addTrack(track, localStreamRef.current!);
-          } catch (_) {}
-        }
+        try {
+          pc.addTrack(track, localStreamRef.current!);
+        } catch (_) {}
       });
     }
 
     // Handle remote media track
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        setRemoteStreams((prev) => ({
+      setRemoteStreams((prev) => {
+        const existingStream = prev[targetKey];
+        if (event.streams && event.streams[0]) {
+          const stream = event.streams[0];
+          return { ...prev, [targetKey]: stream };
+        }
+
+        let updatedStream: MediaStream;
+        if (existingStream) {
+          if (!existingStream.getTracks().some((t) => t.id === event.track.id)) {
+            existingStream.addTrack(event.track);
+          }
+          updatedStream = new MediaStream(existingStream.getTracks());
+        } else {
+          updatedStream = new MediaStream([event.track]);
+        }
+        return {
           ...prev,
-          [targetKey]: event.streams[0],
-        }));
-      } else if (event.track) {
-        const newStream = new MediaStream([event.track]);
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [targetKey]: newStream,
-        }));
-      }
+          [targetKey]: updatedStream,
+        };
+      });
     };
 
     // Handle ICE Candidates
@@ -233,6 +147,97 @@ export function useWebRTC(
 
     return pc;
   }, [socket]);
+
+  // 1. Initialize Local Media Stream (Camera & Microphone)
+  useEffect(() => {
+    const targetUsername = currentUser?.username;
+    const targetRole = currentUser?.role;
+
+    if (!targetUsername || targetRole === 'spectator') {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = null;
+        setLocalStream(null);
+      }
+      return;
+    }
+
+    let isMounted = true;
+
+    async function initLocalStream() {
+      if (localStreamRef.current) return;
+
+      let stream: MediaStream | null = null;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { max: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
+      } catch (err1) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (err2) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          } catch (err3) {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (err4) {
+              console.error('All getUserMedia attempts failed:', err4);
+            }
+          }
+        }
+      }
+
+      if (!isMounted) {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      if (stream) {
+        localStreamRef.current = stream;
+
+        // Apply current mute / video off settings
+        if (currentUserRef.current) {
+          const videoTrack = stream.getVideoTracks()[0];
+          if (videoTrack) videoTrack.enabled = !currentUserRef.current.isVideoOff;
+
+          const audioTrack = stream.getAudioTracks()[0];
+          if (audioTrack) audioTrack.enabled = !currentUserRef.current.isMuted;
+        }
+
+        setLocalStream(stream);
+
+        // Sync local tracks with all existing peer connections and request streams
+        syncLocalTracksToPeers();
+
+        if (socket && currentUserRef.current) {
+          socket.emit('webrtc_request_stream', {
+            targetUsername: 'all',
+            senderUsername: currentUserRef.current.username,
+          });
+        }
+      }
+    }
+
+    initLocalStream();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.username, currentUser?.role, socket, syncLocalTracksToPeers]);
+
+  // Dynamic mute / video off updates on local tracks
+  useEffect(() => {
+    if (!localStreamRef.current || !currentUser) return;
+
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (videoTrack) videoTrack.enabled = !currentUser.isVideoOff;
+
+    const audioTrack = localStreamRef.current.getAudioTracks()[0];
+    if (audioTrack) audioTrack.enabled = !currentUser.isMuted;
+  }, [currentUser?.isVideoOff, currentUser?.isMuted, currentUser]);
 
   // 2. Setup Socket.IO Signaling Listeners
   useEffect(() => {
