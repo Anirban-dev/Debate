@@ -342,17 +342,6 @@ const ioHandler = (
         if (!currentRoomId || !currentUsername || !activeRooms[currentRoomId]) return;
         const roomState = activeRooms[currentRoomId];
 
-        const isAdminLeaving = currentUsername.toLowerCase() === roomState.adminUsername.toLowerCase();
-
-        if (isAdminLeaving && roomState.isPersonalLobby) {
-          io.to(currentRoomId).emit("session_ended_event", {
-            message: "The Admin Host left the lobby. The match session has been ended and room destroyed."
-          });
-          delete activeRooms[currentRoomId];
-          socket.leave(currentRoomId);
-          return;
-        }
-
         const leavingPlayer = roomState.players[currentUsername];
         if (leavingPlayer) {
           const wasPlayerOrAdmin = leavingPlayer.role === 'player' || leavingPlayer.role === 'admin';

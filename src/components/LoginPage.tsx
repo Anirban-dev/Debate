@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MatchRoomState, TeamId } from '../types';
 import { Shield, Users, Eye, Sparkles, UserCheck, AlertCircle, LogIn, Disc as DiscordIcon, Plus, Trash2, Clock, CheckCircle } from 'lucide-react';
+import { PopupModal, ModalData } from './PopupModal';
 
 interface LoginPageProps {
   roomState: MatchRoomState | null;
@@ -17,6 +18,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [usernameInput, setUsernameInput] = useState('');
   const [adminUsernameInput, setAdminUsernameInput] = useState('admin');
   const [selectedProvider, setSelectedProvider] = useState<'google' | 'discord' | 'direct'>('direct');
+  const [modalData, setModalData] = useState<ModalData | null>(null);
   
   // Pre-match roster setup state for Admin
   const [preMatchRoster, setPreMatchRoster] = useState<{ username: string; team: TeamId; personalizedTime: number }[]>(
@@ -41,7 +43,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const trimmed = newPlayerName.trim().toLowerCase();
     if (!trimmed) return;
     if (preMatchRoster.some(p => p.username.toLowerCase() === trimmed)) {
-      alert('Username already exists in match roster!');
+      setModalData({
+        isOpen: true,
+        title: 'Duplicate Username',
+        message: 'Username already exists in match roster!',
+        type: 'warning'
+      });
       return;
     }
     const updated = [...preMatchRoster, { username: trimmed, team: newPlayerTeam, personalizedTime: newPlayerTime }];
@@ -65,7 +72,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     if (!nameToUse) {
       if (mode === 'admin') nameToUse = 'admin';
       else {
-        alert('Please enter a username or sign in with Google/Discord');
+        setModalData({
+          isOpen: true,
+          title: 'Username Required',
+          message: 'Please enter a username or sign in with Google/Discord',
+          type: 'warning'
+        });
         return;
       }
     }
@@ -377,6 +389,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
         )}
       </div>
+
+      <PopupModal data={modalData} onClose={() => setModalData(null)} />
     </div>
   );
 };
