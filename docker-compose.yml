@@ -1,0 +1,28 @@
+services:
+  # 1. MongoDB 7 Database (No Authentication)
+  mongodb:
+    image: mongo:7
+    container_name: mongodb_dev
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # 2. Ngrok Tunnel
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok_dev
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROC_TOKEN}
+    command:
+      - "http"
+      - "host.docker.internal:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mongo_data:
