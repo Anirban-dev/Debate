@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MatchRoomState, Player, TeamId } from '../types';
 import { Mic, MicOff, Video, VideoOff, Volume2, Shield, Clock, UserX, Ban, Edit2, Check, X, ArrowRightLeft } from 'lucide-react';
-import { MediaVideoElement, RemoteAudioElement } from './ActiveSpeakerStage';
+import { MediaVideoElement } from './ActiveSpeakerStage';
 import { PopupModal, ModalData } from './PopupModal';
 
 interface PlayerRosterGridProps {
@@ -29,11 +29,6 @@ const PlayerStreamBox: React.FC<{
 
   return (
     <div className="relative shrink-0">
-      {/* Remote Audio player for player voice stream */}
-      {!isSelf && remoteStream && (
-        <RemoteAudioElement stream={remoteStream} isMuted={player.isMuted} />
-      )}
-
       {!player.isVideoOff && stream ? (
         <div className="w-12 h-12 rounded-xl bg-slate-950 border border-blue-500/80 overflow-hidden shadow">
           <MediaVideoElement stream={stream} isSelf={isSelf} className="w-full h-full object-cover" />

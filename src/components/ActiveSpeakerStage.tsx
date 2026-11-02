@@ -240,11 +240,6 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
         <div className="relative aspect-video bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center group shadow-inner">
           {activePlayer ? (
             <>
-              {/* Hidden audio element for remote active speaker voice audio */}
-              {!isSelfActive && activeStream && (
-                <RemoteAudioElement stream={activeStream} isMuted={activePlayer.isMuted} />
-              )}
-
               {/* Real Camera Stream if active speaker has camera ON */}
               {!activePlayer.isVideoOff && activeStream ? (
                 <MediaVideoElement stream={activeStream} isSelf={isSelfActive} className="w-full h-full object-cover rounded-xl" />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MatchRoomState, Player } from '@/types';
 import { Mic, MicOff, Video, VideoOff, Crown, Volume2, Minimize2, Maximize2 } from 'lucide-react';
-import { MediaVideoElement, RemoteAudioElement } from './ActiveSpeakerStage';
+import { MediaVideoElement } from './ActiveSpeakerStage';
 
 interface FloatingAdminWidgetProps {
   roomState: MatchRoomState;
@@ -62,11 +62,6 @@ export const FloatingAdminWidget: React.FC<FloatingAdminWidgetProps> = ({
 
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2 max-w-[calc(100vw-2.5rem)] select-none">
-      {/* Remote Audio Listener for everyone when admin stream is active & non-self */}
-      {!isAdminSelf && adminStream && (
-        <RemoteAudioElement stream={adminStream} isMuted={adminPlayer.isMuted} />
-      )}
-
       {/* CASE A: Camera is ON and NOT Minimized -> Render Floating Video Screen */}
       {isCamOn && !isMinimized ? (
         <div className="w-56 sm:w-72 aspect-video rounded-2xl border-2 border-purple-500/90 bg-slate-950 shadow-2xl shadow-purple-950/80 overflow-hidden relative group backdrop-blur-md transition-all">

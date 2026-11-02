@@ -15,6 +15,7 @@ import { AdminPanelModal } from '@/components/AdminPanelModal';
 import { RoastNotification, ToastItem } from '@/components/RoastNotification';
 import { PopupModal, ModalData } from '@/components/PopupModal';
 import { FloatingAdminWidget } from '@/components/FloatingAdminWidget';
+import { RemoteAudioHub } from '@/components/RemoteAudioHub';
 import { useWebRTC } from '@/lib/useWebRTC';
 import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
 
@@ -536,6 +537,13 @@ export default function Home() {
       <PopupModal
         data={modalData}
         onClose={() => setModalData(null)}
+      />
+
+      {/* Plays every remote participant's voice exactly once */}
+      <RemoteAudioHub
+        roomState={roomState}
+        remoteStreams={remoteStreams}
+        currentUsername={currentUser?.username}
       />
 
       {/* Persistent Bottom-Left Floating Admin Broadcast Widget & Controls */}
