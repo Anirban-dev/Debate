@@ -18,6 +18,13 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' },
+    ...(process.env.NEXT_PUBLIC_TURN_URL
+      ? [{
+          urls: process.env.NEXT_PUBLIC_TURN_URL,
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+        }]
+      : []),
   ],
 };
 
@@ -32,6 +39,8 @@ export function useWebRTC(
 
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const pendingCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const makingOffer = useRef<Record<string, boolean>>({});
+  const ignoreOffer = useRef<Record<string, boolean>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
   const currentUserRef = useRef<Player | null>(currentUser);
 
@@ -48,19 +57,27 @@ export function useWebRTC(
       let tracksAdded = false;
       stream.getTracks().forEach((track) => {
         const senders = pc.getSenders();
-        const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+        const existingSender = senders.find(s => s.track?.kind === track.kind)
+          || pc.getTransceivers().find((transceiver) =>
+            !transceiver.sender.track && transceiver.receiver.track.kind === track.kind
+          )?.sender;
         if (existingSender) {
-          existingSender.replaceTrack(track).catch(() => {});
+          existingSender.replaceTrack(track).catch((error) => {
+            console.warn('Error replacing local WebRTC track:', error);
+          });
         } else {
           try {
             pc.addTrack(track, stream);
             tracksAdded = true;
-          } catch (_) {}
+          } catch (error) {
+            console.warn('Error adding local WebRTC track:', error);
+          }
         }
       });
 
-      if (tracksAdded && socket && currentUserRef.current) {
+      if (tracksAdded && socket && currentUserRef.current && pc.signalingState === 'stable') {
         try {
+          makingOffer.current[remoteUser] = true;
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit('webrtc_offer', {
@@ -70,6 +87,8 @@ export function useWebRTC(
           });
         } catch (err) {
           console.warn('Error sending renegotiation offer:', err);
+        } finally {
+          makingOffer.current[remoteUser] = false;
         }
       }
     });
@@ -85,23 +104,32 @@ export function useWebRTC(
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnections.current[targetKey] = pc;
 
-    // Add audio & video transceivers to guarantee sendrecv directionality in SDP offers
+    // Add one transceiver per media kind. Tracks are attached to these senders below.
     try {
       pc.addTransceiver('audio', { direction: 'sendrecv' });
       pc.addTransceiver('video', { direction: 'sendrecv' });
-    } catch (_) {}
+    } catch (error) {
+      console.warn('Error creating WebRTC transceivers:', error);
+    }
 
     // Attach local stream tracks if available
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
         const senders = pc.getSenders();
-        const existingSender = senders.find((s) => s.track?.kind === track.kind);
+        const existingSender = senders.find((s) => s.track?.kind === track.kind)
+          || pc.getTransceivers().find((transceiver) =>
+            !transceiver.sender.track && transceiver.receiver.track.kind === track.kind
+          )?.sender;
         if (existingSender) {
-          existingSender.replaceTrack(track).catch(() => {});
+          existingSender.replaceTrack(track).catch((error) => {
+            console.warn('Error attaching local WebRTC track:', error);
+          });
         } else {
           try {
             pc.addTrack(track, localStreamRef.current!);
-          } catch (_) {}
+          } catch (error) {
+            console.warn('Error adding local WebRTC track:', error);
+          }
         }
       });
     }
@@ -153,6 +181,9 @@ export function useWebRTC(
           delete updated[targetKey];
           return updated;
         });
+        delete pendingCandidates.current[targetKey];
+        delete makingOffer.current[targetKey];
+        delete ignoreOffer.current[targetKey];
       }
     };
 
@@ -263,6 +294,15 @@ export function useWebRTC(
 
       try {
         const pc = getOrCreatePeerConnection(sender);
+        const polite = myUsername > sender;
+        const offerCollision = makingOffer.current[sender] || pc.signalingState !== 'stable';
+        ignoreOffer.current[sender] = !polite && offerCollision;
+        if (ignoreOffer.current[sender]) return;
+
+        if (offerCollision) {
+          await pc.setLocalDescription({ type: 'rollback' });
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
         // Flush queued ICE candidates for this sender
@@ -293,7 +333,7 @@ export function useWebRTC(
 
       try {
         const pc = peerConnections.current[sender];
-        if (pc && pc.signalingState !== 'stable') {
+        if (pc && pc.signalingState === 'have-local-offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
 
           // Flush queued ICE candidates for this sender
@@ -336,6 +376,8 @@ export function useWebRTC(
 
       try {
         const pc = getOrCreatePeerConnection(sender);
+        if (makingOffer.current[sender] || pc.signalingState !== 'stable') return;
+        makingOffer.current[sender] = true;
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
@@ -346,6 +388,8 @@ export function useWebRTC(
         });
       } catch (e) {
         console.warn('Error initiating stream offer:', e);
+      } finally {
+        makingOffer.current[sender] = false;
       }
     };
 
