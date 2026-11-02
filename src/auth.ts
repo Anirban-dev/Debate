@@ -2,24 +2,17 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import DiscordProvider from "next-auth/providers/discord";
 
-process.env.AUTH_TRUST_HOST = "true";
-
-if (!process.env.AUTH_SECRET) {
-  process.env.AUTH_SECRET = process.env.NEXTAUTH_SECRET || "match-lobby-nextauth-secret-key-2026";
-}
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "match-lobby-nextauth-secret-key-2026",
+  secret: process.env.AUTH_SECRET,
   trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "google-client-id-placeholder",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "google-client-secret-placeholder",
     }),
-   DiscordProvider({
-  clientId: process.env.DISCORD_CLIENT_ID || "discord-client-id-placeholder",
-  clientSecret: process.env.DISCORD_CLIENT_SECRET || "discord-client-secret-placeholder",
-  issuer: "https://discord.com",
+    DiscordProvider({
+      clientId: process.env.DISCORD_CLIENT_ID || "discord-client-id-placeholder",
+      clientSecret: process.env.DISCORD_CLIENT_SECRET || "discord-client-secret-placeholder",
     }),
   ],
   callbacks: {
@@ -42,5 +35,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   session: { strategy: "jwt" },
-  trustHost: true,
 });
