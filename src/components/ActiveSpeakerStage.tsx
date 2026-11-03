@@ -24,35 +24,57 @@ export const MediaVideoElement: React.FC<{
     const video = videoRef.current;
     if (!video || !stream) return;
 
+    let disposed = false;
+    let gestureCleanup: (() => void) | null = null;
+
+    // Only assign when the stream reference actually changed.
+    // Re-assigning srcObject (even to an equivalent stream) aborts a pending play().
     if (video.srcObject !== stream) {
       video.srcObject = stream;
     }
 
     const attemptPlay = () => {
-      if (video && video.paused) {
-        video.play().catch((err) => {
-          console.warn('MediaVideoElement play error:', err);
-        });
-      }
+      // Never touch an element that was unmounted, has no source, or is already playing
+      if (disposed || !video.isConnected || !video.srcObject || !video.paused) return;
+
+      video.play().catch((err: DOMException) => {
+        if (disposed) return;
+        // AbortError = interrupted by a newer load / element removal. Harmless.
+        if (err?.name === 'AbortError') return;
+        // Autoplay blocked: retry on the first user gesture.
+        if (err?.name === 'NotAllowedError' && !gestureCleanup) {
+          const retry = () => {
+            gestureCleanup?.();
+            gestureCleanup = null;
+            attemptPlay();
+          };
+          window.addEventListener('pointerdown', retry, { once: true });
+          window.addEventListener('keydown', retry, { once: true });
+          gestureCleanup = () => {
+            window.removeEventListener('pointerdown', retry);
+            window.removeEventListener('keydown', retry);
+          };
+          return;
+        }
+        console.warn('MediaVideoElement play error:', err);
+      });
     };
+
+    // Tracks added/removed on the SAME stream are picked up by the <video>
+    // automatically. We must NOT replace srcObject here – just make sure it's playing.
+    const handleTrackChange = () => attemptPlay();
 
     video.addEventListener('loadedmetadata', attemptPlay);
     video.addEventListener('loadeddata', attemptPlay);
     video.addEventListener('canplay', attemptPlay);
-
-    attemptPlay();
-
-    const handleTrackChange = () => {
-      if (video) {
-        video.srcObject = new MediaStream(stream.getTracks());
-        attemptPlay();
-      }
-    };
-
     stream.addEventListener('addtrack', handleTrackChange);
     stream.addEventListener('removetrack', handleTrackChange);
 
+    attemptPlay();
+
     return () => {
+      disposed = true;
+      gestureCleanup?.();
       video.removeEventListener('loadedmetadata', attemptPlay);
       video.removeEventListener('loadeddata', attemptPlay);
       video.removeEventListener('canplay', attemptPlay);
@@ -60,6 +82,17 @@ export const MediaVideoElement: React.FC<{
       stream.removeEventListener('removetrack', handleTrackChange);
     };
   }, [stream]);
+
+  // Release the element's reference only on real unmount
+  useEffect(() => {
+    const video = videoRef.current;
+    return () => {
+      if (video) {
+        video.pause();
+        video.srcObject = null;
+      }
+    };
+  }, []);
 
   if (!stream) return null;
 
@@ -85,39 +118,57 @@ export const RemoteAudioElement: React.FC<{
     const audio = audioRef.current;
     if (!audio || !stream) return;
 
+    let disposed = false;
+
+    // Same stream object for the lifetime of the peer – only assign if it changed
     if (audio.srcObject !== stream) {
       audio.srcObject = stream;
     }
-
     audio.muted = !!isMuted;
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch((err) => {
-        console.warn('RemoteAudioElement play prevented, waiting for user interaction:', err);
-      });
-    }
-  }, [stream, isMuted]);
+    audio.volume = 1;
 
-  useEffect(() => {
-    const handleGesture = () => {
-      const audio = audioRef.current;
-      if (audio && audio.paused && !isMuted) {
-        audio.play().catch(() => {});
-      }
+    const tryPlay = () => {
+      if (disposed || !audio.isConnected || !audio.srcObject || !audio.paused) return;
+      audio.play().catch((err: DOMException) => {
+        if (disposed || err?.name === 'AbortError') return;
+        // NotAllowedError (autoplay policy): the gesture listeners below retry on next click/key
+      });
     };
 
-    window.addEventListener('click', handleGesture, { once: false });
-    window.addEventListener('keydown', handleGesture, { once: false });
+    // Audio track may arrive after the stream was attached (stable stream is mutated in place)
+    stream.addEventListener('addtrack', tryPlay);
+    audio.addEventListener('loadedmetadata', tryPlay);
+    audio.addEventListener('canplay', tryPlay);
+    // Browser autoplay policy: retry on any user gesture (no-op once playing)
+    window.addEventListener('pointerdown', tryPlay);
+    window.addEventListener('keydown', tryPlay);
+
+    tryPlay();
 
     return () => {
-      window.removeEventListener('click', handleGesture);
-      window.removeEventListener('keydown', handleGesture);
+      disposed = true;
+      stream.removeEventListener('addtrack', tryPlay);
+      audio.removeEventListener('loadedmetadata', tryPlay);
+      audio.removeEventListener('canplay', tryPlay);
+      window.removeEventListener('pointerdown', tryPlay);
+      window.removeEventListener('keydown', tryPlay);
     };
-  }, [isMuted]);
+  }, [stream, isMuted]);
+
+  // Release the element's reference only on real unmount
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+      }
+    };
+  }, []);
 
   if (!stream) return null;
 
-  return <audio ref={audioRef} autoPlay muted={isMuted} className="hidden" />;
+  return <audio ref={audioRef} autoPlay className="hidden" />;
 };
 
 export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
@@ -148,6 +199,12 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Audio for EVERY remote peer. The spotlight <video> is muted and only exists
+          while the active speaker's camera is on, so audio must be played separately. */}
+      {Object.entries(remoteStreams).map(([key, remoteStream]) => (
+        <RemoteAudioElement key={key} stream={remoteStream} />
+      ))}
+
       {/* Sequence Finished / Re-queue Banner */}
       {isSequenceFinished && (
         <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-purple-950 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-2xl flex flex-wrap items-center justify-between gap-3">
