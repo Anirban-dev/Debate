@@ -59,7 +59,7 @@ export function useWebRTC(
         const senders = pc.getSenders();
         const existingSender = senders.find(s => s.track?.kind === track.kind)
           || pc.getTransceivers().find((transceiver) =>
-            !transceiver.sender.track && transceiver.receiver.track.kind === track.kind
+            !transceiver.sender.track && transceiver.receiver.track?.kind === track.kind
           )?.sender;
         if (existingSender) {
           existingSender.replaceTrack(track).catch((error) => {
@@ -118,7 +118,7 @@ export function useWebRTC(
         const senders = pc.getSenders();
         const existingSender = senders.find((s) => s.track?.kind === track.kind)
           || pc.getTransceivers().find((transceiver) =>
-            !transceiver.sender.track && transceiver.receiver.track.kind === track.kind
+            !transceiver.sender.track && transceiver.receiver.track?.kind === track.kind
           )?.sender;
         if (existingSender) {
           existingSender.replaceTrack(track).catch((error) => {

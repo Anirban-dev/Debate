@@ -143,29 +143,8 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
         ? roomState.players[roomState.registeredRoster[0].username]
         : (Object.values(roomState.players).find(p => p.role === 'player') || null));
 
-  const stageVideoRef = useRef<HTMLVideoElement | null>(null);
-  const stageAudioRef = useRef<HTMLAudioElement | null>(null);
-
   const isSelfActive = !!(currentUser && activePlayer && currentUser.username.toLowerCase() === activePlayer.username.toLowerCase());
   const activeStream = isSelfActive ? localStream : (activePlayer ? remoteStreams[activePlayer.username.toLowerCase()] : null);
-
-  useEffect(() => {
-    if (stageVideoRef.current && activeStream && activePlayer && !activePlayer.isVideoOff) {
-      if (stageVideoRef.current.srcObject !== activeStream) {
-        stageVideoRef.current.srcObject = activeStream;
-      }
-      stageVideoRef.current.play().catch(() => {});
-    }
-  }, [activeStream, activePlayer?.isVideoOff, activePlayer?.username, activePlayer]);
-
-  useEffect(() => {
-    if (stageAudioRef.current && activeStream && !isSelfActive) {
-      if (stageAudioRef.current.srcObject !== activeStream) {
-        stageAudioRef.current.srcObject = activeStream;
-      }
-      stageAudioRef.current.play().catch(() => {});
-    }
-  }, [activeStream, isSelfActive, activePlayer?.username]);
 
   return (
     <div className="space-y-4">
