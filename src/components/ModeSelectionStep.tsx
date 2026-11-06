@@ -128,7 +128,7 @@ export const ModeSelectionStep: React.FC<ModeSelectionStepProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <img
-              src={currentUser.avatarUrl}
+              src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.username}`}
               alt={currentUser.username}
               className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 p-0.5"
             />

@@ -140,7 +140,7 @@ export const FloatingAdminWidget: React.FC<FloatingAdminWidgetProps> = ({
           <div className="relative shrink-0">
             <div className="w-10 h-10 rounded-full border-2 border-purple-400 overflow-hidden bg-purple-950 flex items-center justify-center">
               <img
-                src={adminPlayer.avatarUrl}
+                src={adminPlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${adminPlayer.username}`}
                 alt={adminPlayer.username}
                 className="w-full h-full object-cover"
               />

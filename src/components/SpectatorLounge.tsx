@@ -90,7 +90,7 @@ export const SpectatorLounge: React.FC<SpectatorLoungeProps> = ({
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
                       <img
-                        src={spectator.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${spectator.username}`}
+                        src={spectator.avatarUrl?.trim() ? spectator.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${spectator.username}`}
                         alt={spectator.username}
                         className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
                       />

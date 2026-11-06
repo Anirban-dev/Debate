@@ -286,7 +286,7 @@ export const ActiveSpeakerStage: React.FC<ActiveSpeakerStageProps> = ({
                     activePlayer.team === 'team1' ? 'border-blue-500 shadow-lg shadow-blue-900/50' : 'border-red-500 shadow-lg shadow-red-900/50'
                   }`}>
                     <img
-                      src={activePlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${activePlayer.username}`}
+                      src={activePlayer.avatarUrl?.trim() ? activePlayer.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${activePlayer.username}`}
                       alt={activePlayer.username}
                       className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-800 object-cover"
                     />

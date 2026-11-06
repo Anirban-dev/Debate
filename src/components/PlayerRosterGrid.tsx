@@ -36,7 +36,7 @@ const PlayerStreamBox: React.FC<{
       ) : (
         <div className="relative shrink-0">
           <img
-            src={player.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${player.username}`}
+            src={player.avatarUrl?.trim() ? player.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${player.username}`}
             alt={player.username}
             className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
           />
