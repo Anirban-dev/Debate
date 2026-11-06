@@ -55,21 +55,28 @@ export async function POST(req: NextRequest) {
       roomId: cleanRoomId,
       roomTitle: roomTitle || `Match Room (${cleanRoomId})`,
       adminUsername: cleanAdmin,
+      isPersonalLobby: cleanRoomId !== "main-lobby",
       players: {},
+      bannedUsernames: [],
       registeredRoster: registeredRoster.map((r: any) => ({
         username: r.username.trim().toLowerCase(),
         team: r.team,
         personalizedTime: Number(r.personalizedTime) || 180
       })),
-      notesPages: [
-        {
-          pageNumber: 1,
-          title: "Page 1: Match Rules & Notes",
-          content: `# ${roomTitle || 'Match Notes'}\n\n- Created by @${cleanAdmin}\n- Team 1 Total: ${team1TotalTime}s\n- Team 2 Total: ${team2TotalTime}s`,
+      teamNotes: {
+        team1: {
+          teamId: "team1",
+          title: "Team 1 Secret Strategy Pad",
+          content: `# ${roomTitle || 'Match Room'} - Team 1 Strategy\n\n- Key points for debate.`,
+          updatedAt: Date.now()
+        },
+        team2: {
+          teamId: "team2",
+          title: "Team 2 Secret Strategy Pad",
+          content: `# ${roomTitle || 'Match Room'} - Team 2 Strategy\n\n- Key points for debate.`,
           updatedAt: Date.now()
         }
-      ],
-      activePageIndex: 0,
+      },
       chatMessages: [
         {
           id: `sys-created-${Date.now()}`,

@@ -5,7 +5,7 @@ import { Play, Pause, RotateCcw, Shield, Eye, Users, Volume2, VolumeX, AlertTria
 interface LobbyHeaderProps {
   roomState: MatchRoomState;
   currentUser: Player | null;
-  onControlTimer: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
+  onControlTimer: (action: "start" | "pause" | "reset" | "switch_turn" | "requeue", extra?: any) => void;
   onOpenAdminPanel: () => void;
   onLeaveRoom: () => void;
   onLogout: () => void;

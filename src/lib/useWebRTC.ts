@@ -47,6 +47,9 @@ export function useWebRTC(
   const localStreamRef    = useRef<MediaStream | null>(null);
   const socketRef         = useRef<Socket | null>(null);
   const currentUserRef    = useRef<Player | null>(null);
+  // Track online peers we've already attempted to connect so Effect 4 doesn't
+  // spam request_stream on every server state broadcast.
+  const reconnectAttempted = useRef<Set<string>>(new Set());
 
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
@@ -174,6 +177,8 @@ export function useWebRTC(
         delete peerConnections.current[targetKey];
         delete pendingCandidates.current[targetKey];
         delete makingOffer.current[targetKey];
+        // Allow Effect 4 to issue a fresh reconnect attempt for this peer
+        reconnectAttempted.current.delete(targetKey);
         setRemoteStreams((prev) => {
           const next = { ...prev };
           delete next[targetKey];
@@ -316,7 +321,14 @@ export function useWebRTC(
 
       try {
         const pc = peerConnections.current[sender];
-        if (!pc || pc.signalingState !== 'have-local-offer') return;
+        if (!pc) return;
+
+        // If we're not yet in the right state to apply the answer, wait briefly
+        // (can happen during rapid ICE restarts or onnegotiationneeded races).
+        if (pc.signalingState !== 'have-local-offer') {
+          console.warn('[WebRTC] handleAnswer: unexpected signalingState', pc.signalingState, '– dropping answer from', sender);
+          return;
+        }
 
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
 
@@ -324,6 +336,8 @@ export function useWebRTC(
           await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
         }
         delete pendingCandidates.current[sender];
+        // Answer applied — peer is now connected; mark as successfully reconnected
+        reconnectAttempted.current.add(sender);
       } catch (e) {
         console.warn('[WebRTC] handleAnswer error:', e);
       }
@@ -376,25 +390,42 @@ export function useWebRTC(
       socket.off('webrtc_answer',         handleAnswer);
       socket.off('webrtc_ice_candidate',  handleCandidate);
       socket.off('webrtc_request_stream', handleRequestStream);
+      // Reset reconnect tracking when socket/user changes so peers get a fresh attempt
+      reconnectAttempted.current.clear();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, currentUser?.username]);
 
   // ─── 4. Auto-reconnect to any online player that lost their PC ────────────
+  // This effect fires on every server state broadcast (roomState.players changes
+  // on every timer tick etc.). Guard with reconnectAttempted so we only send the
+  // request_stream signal when a peer is *newly* seen or has a *failed/closed* PC.
   useEffect(() => {
     if (!socket || !currentUser || !roomState?.players) return;
 
     const myUser = currentUser.username.toLowerCase();
     Object.values(roomState.players).forEach((p) => {
       const uname = p.username.toLowerCase();
-      if (uname === myUser || !p.isOnline) return;
+      if (uname === myUser || !p.isOnline) {
+        // Clear tracking for peers that went offline so we reconnect when they return
+        if (!p.isOnline) reconnectAttempted.current.delete(uname);
+        return;
+      }
 
       const pc = peerConnections.current[uname];
-      if (!pc || pc.connectionState === 'failed' || pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+      const needsReconnect =
+        !pc ||
+        pc.connectionState === 'failed' ||
+        pc.connectionState === 'closed';
+
+      if (needsReconnect && !reconnectAttempted.current.has(uname)) {
+        reconnectAttempted.current.add(uname);
         socket.emit('webrtc_request_stream', {
           targetUsername: uname,
           senderUsername: currentUser.username,
         });
+      } else if (!needsReconnect && reconnectAttempted.current.has(uname)) {
+        // PC is healthy — keep it in the set so we don't thrash
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

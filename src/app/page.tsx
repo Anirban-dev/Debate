@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ChatChannel, MatchRoomState, Player, TeamId } from '@/types';
 import { LoginStep } from '@/components/LoginStep';
@@ -26,7 +26,7 @@ export default function Home() {
   const [appStep, setAppStep] = useState<'login' | 'mode_select' | 'in_game'>('login');
 
   // Authenticated user from LoginStep
-  const [authUser, setAuthUser] = useState<{ username: string } | null>(null);
+  const [authUser, setAuthUser] = useState<{ username: string; authProvider?: string; avatarUrl?: string } | null>(null);
 
   // Active room state and player role object
   const [roomState, setRoomState] = useState<MatchRoomState | null>(null);
@@ -75,24 +75,10 @@ export default function Home() {
   // View navigation tab in match lobby: 'stage' | 'spectators' | 'notes' | 'chat'
   const [activeViewTab, setActiveViewTab] = useState<'stage' | 'spectators' | 'notes' | 'chat'>('stage');
 
-  // Check active session on mount
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated && data.user) {
-            setAuthUser(data.user);
-            setAppStep('mode_select');
-          }
-        }
-      } catch (err) {
-        // Session not active, remain on login screen
-      }
-    };
-    checkSession();
-  }, []);
+  // Session restoration is handled entirely by LoginStep's verifySession effect.
+  // Having a duplicate fetch here caused a race condition where both fetches
+  // would race to call setAppStep, sometimes leaving the user stuck on login.
+  // The LoginStep calls onLoginSuccess which sets authUser + appStep in one shot.
 
   // Initialize Socket.IO connection ONCE
   useEffect(() => {
@@ -213,11 +199,11 @@ export default function Home() {
     };
   }, []);
 
-  // Step 1 Complete: User Login
-  const handleLoginSuccess = (user: { username: string }) => {
+  // Step 1 Complete: User Login — stable reference so LoginStep's effect runs only once
+  const handleLoginSuccess = useCallback((user: { username: string }) => {
     setAuthUser(user);
     setAppStep('mode_select');
-  };
+  }, []);
 
   // Step 2 Action: Enter Game (or after Create Game)
   const handleEnterGame = async (roomIdToJoin: string) => {
@@ -238,13 +224,11 @@ export default function Home() {
       newSock.emit('join_room', {
         roomId: cleanRoom,
         username: authUser.username,
-        provider: authUser.authProvider
       });
     } else {
       socket.emit('join_room', {
         roomId: cleanRoom,
         username: authUser.username,
-        provider: authUser.authProvider
       });
     }
   };
@@ -298,7 +282,7 @@ export default function Home() {
     });
   };
 
-  const handleControlTimer = (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => {
+  const handleControlTimer = (action: "start" | "pause" | "reset" | "switch_turn" | "requeue", extra?: any) => {
     if (!socket) return;
     socket.emit('admin_control_timer', { action, ...extra });
   };
@@ -358,7 +342,7 @@ export default function Home() {
   if (appStep === 'mode_select' && authUser) {
     return (
       <ModeSelectionStep
-        currentUser={authUser}
+        currentUser={{ username: authUser.username, authProvider: authUser.authProvider ?? 'oauth', avatarUrl: authUser.avatarUrl ?? '' }}
         onEnterGame={handleEnterGame}
         onLogout={handleLogout}
       />

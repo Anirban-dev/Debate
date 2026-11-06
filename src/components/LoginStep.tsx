@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { signIn } from 'next-auth/react';
 import { ArrowRight, Disc as DiscordIcon, ShieldCheck, AtSign, CheckCircle2, Copy, Info, UserCheck } from 'lucide-react';
 
@@ -20,12 +20,19 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
   const nextAuthCallbackUrl = `${currentOrigin}/api/auth/callback/google`;
 
-  // Check active NextAuth session on mount
+  // Keep a stable ref to onLoginSuccess so the effect never re-runs just
+  // because the parent re-rendered and produced a new function reference.
+  const onLoginSuccessRef = useRef(onLoginSuccess);
+  useEffect(() => { onLoginSuccessRef.current = onLoginSuccess; }, [onLoginSuccess]);
+
+  // Check active NextAuth session ONCE on mount
   useEffect(() => {
+    let cancelled = false;
     const verifySession = async () => {
       try {
         setCheckingSession(true);
         const res = await fetch('/api/auth/me');
+        if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated) {
@@ -33,19 +40,22 @@ export const LoginStep: React.FC<LoginStepProps> = ({ onLoginSuccess }) => {
               setPendingUser(data.pendingUser || null);
               setStepMode('choose_username');
             } else if (data.user) {
-              onLoginSuccess(data.user);
+              onLoginSuccessRef.current(data.user);
             }
           }
         }
       } catch (err) {
-        // Not authenticated yet
+        // Not authenticated yet – stay on login screen
       } finally {
-        setCheckingSession(false);
+        if (!cancelled) setCheckingSession(false);
       }
     };
 
     verifySession();
-  }, [onLoginSuccess]);
+    return () => { cancelled = true; };
+  // Empty deps: run only once on mount. onLoginSuccess is accessed via ref.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleOAuthSignIn = async (provider: 'google' | 'discord') => {
     setErrorMsg(null);

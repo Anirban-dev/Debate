@@ -3,10 +3,18 @@ import UserModel, { IUser } from '@/models/User';
 
 export { UserModel, type IUser };
 
-let isDbConnected = false;
+// Use a cached connection so serverless hot-reloads and multiple
+// Next.js route handlers share the same underlying TCP connection.
+// The flag is checked against the live Mongoose readyState so a
+// stale process-level variable can never hide a real disconnection.
+let connectionPromise: Promise<boolean> | null = null;
 
-export async function initMongoDB() {
-  if (isDbConnected) return true;
+export async function initMongoDB(): Promise<boolean> {
+  // Already connected and Mongoose agrees
+  if (mongoose.connection.readyState === 1) return true;
+
+  // If a connection attempt is already in flight, await it
+  if (connectionPromise) return connectionPromise;
 
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -14,19 +22,31 @@ export async function initMongoDB() {
     return false;
   }
 
-  try {
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-    isDbConnected = true;
-    console.log('🍃 MongoDB connected successfully!');
-    return true;
-  } catch (err) {
-    console.error('❌ MongoDB connection failed:', err);
-    return false;
-  }
+  connectionPromise = mongoose
+    .connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 30000,
+    })
+    .then(() => {
+      console.log('🍃 MongoDB connected successfully!');
+      return true as boolean;
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB connection failed:', err);
+      return false as boolean;
+    })
+    .finally(() => {
+      // Allow future calls to retry if connection failed
+      if (mongoose.connection.readyState !== 1) {
+        connectionPromise = null;
+      }
+    });
+
+  return connectionPromise;
 }
 
 export function isMongoConnected() {
-  return isDbConnected;
+  return mongoose.connection.readyState === 1;
 }
 
 export async function findUserByOAuthIdOrEmail(oauthId: string, email?: string) {

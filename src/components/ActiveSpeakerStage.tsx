@@ -8,7 +8,7 @@ interface ActiveSpeakerStageProps {
   localStream?: MediaStream | null;
   remoteStreams?: Record<string, MediaStream>;
   onToggleMedia?: (mediaType: 'mic' | 'video', value: boolean) => void;
-  onControlTimer?: (action: "start" | "pause" | "reset" | "switch_turn", extra?: any) => void;
+  onControlTimer?: (action: "start" | "pause" | "reset" | "switch_turn" | "requeue", extra?: any) => void;
   onAdminUpdatePlayer?: (targetUsername: string, updates: Partial<Player>) => void;
 }
 
