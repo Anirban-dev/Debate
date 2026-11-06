@@ -18,6 +18,7 @@ import { FloatingAdminWidget } from '@/components/FloatingAdminWidget';
 import { RemoteAudioHub } from '@/components/RemoteAudioHub';
 import { useWebRTC } from '@/lib/useWebRTC';
 import { Video, Eye, FileText, MessageSquare, LayoutGrid } from 'lucide-react';
+import { signOut } from 'next-auth/react';
 
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -234,10 +235,18 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    if (socket) {
+      socket.emit('leave_room');
+    }
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
       // Ignore network errors
+    }
+    try {
+      await signOut({ redirect: false });
+    } catch (e) {
+      // Ignore signOut errors if already logged out
     }
     setAuthUser(null);
     setCurrentUser(null);
